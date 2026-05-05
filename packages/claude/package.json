@@ -1,0 +1,65 @@
+{
+  "name": "floe-claude-agent",
+  "version": "0.1.0",
+  "description": "Floe (onchain credit for AI agents on Base) primitives for the Claude Agent SDK: MCP config helpers, credit preflight + borrow-event hooks, spend-limit setup, Floe Skill markdown.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "floe",
+    "claude",
+    "claude-agent-sdk",
+    "x402",
+    "credit",
+    "agent"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "example:agent": "tsx examples/code-execution/run.ts",
+    "example:agent:dry": "FLOE_DRY_RUN=1 tsx examples/code-execution/run.ts",
+    "example:agent:real": "FLOE_REAL=1 tsx examples/code-execution/run.ts",
+    "example:smoke": "tsx examples/code-execution/smoke.ts",
+    "prepublishOnly": "pnpm build"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/claude-agent-sdk": ">=0.2.0",
+    "zod": "^3.0.0 || ^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@anthropic-ai/claude-agent-sdk": { "optional": false },
+    "zod": { "optional": true }
+  },
+  "dependencies": {
+    "@floe-agents/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.128",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.0",
+    "express": "^4.21.2",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8",
+    "zod": "^4.0.0"
+  }
+}
