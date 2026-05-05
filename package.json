@@ -1,0 +1,24 @@
+{
+  "name": "zerobrane-floe-agents",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Monorepo of TypeScript packages making Floe — onchain credit for AI agents on Base — usable from the Claude Agent SDK and LangGraph.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "packageManager": "pnpm@10.33.1",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "check": "biome check ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "typescript": "^5.6.3"
+  }
+}
