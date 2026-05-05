@@ -4,18 +4,25 @@
 
 import type { Server } from "node:http";
 import type { Express } from "express";
-import { mockX402ExecApp } from "../code-exec/mock-x402-exec.js";
 import { mockFloeApp, mockFloeState } from "./mock-floe.js";
 import { mockSearchApp } from "../with-floe-search/mock-search.js";
 
 export interface MockEndpoints {
   floeBaseUrl: string;
   searchBaseUrl: string;
-  execBaseUrl: string;
+  /** Set when `withAgentExec: true` was passed. */
+  execBaseUrl?: string;
   stop: () => Promise<void>;
 }
 
-export async function startMockServers(): Promise<MockEndpoints> {
+export interface StartMockServersOptions {
+  /** Also spin up the agent demo's mock-x402-exec endpoint. */
+  withAgentExec?: boolean;
+}
+
+export async function startMockServers(
+  opts: StartMockServersOptions = {},
+): Promise<MockEndpoints> {
   mockFloeState.creditOut = 0n;
   mockFloeState.sessionSpent = 0n;
   mockFloeState.sessionSpendLimit = null;
@@ -24,27 +31,30 @@ export async function startMockServers(): Promise<MockEndpoints> {
   const floePort = (floeServer.address() as { port: number }).port;
   const floeBaseUrl = `http://127.0.0.1:${floePort}`;
 
-  // search + exec endpoints read MOCK_FLOE_URL on each request.
-  process.env.MOCK_FLOE_URL = floeBaseUrl;
-
   const searchServer = await listen(mockSearchApp);
   const searchPort = (searchServer.address() as { port: number }).port;
 
-  const execServer = await listen(mockX402ExecApp);
-  const execPort = (execServer.address() as { port: number }).port;
+  const servers: Server[] = [floeServer, searchServer];
+  let execBaseUrl: string | undefined;
 
-  return {
+  if (opts.withAgentExec) {
+    // Lazy import so the agent example's mock isn't pulled into builds that don't need it.
+    const { mockX402ExecApp } = await import("../agent/mock-x402-exec.js");
+    const execServer = await listen(mockX402ExecApp);
+    const execPort = (execServer.address() as { port: number }).port;
+    execBaseUrl = `http://127.0.0.1:${execPort}`;
+    servers.push(execServer);
+  }
+
+  const result: MockEndpoints = {
     floeBaseUrl,
     searchBaseUrl: `http://127.0.0.1:${searchPort}`,
-    execBaseUrl: `http://127.0.0.1:${execPort}`,
     stop: async () => {
-      await Promise.all([
-        close(floeServer),
-        close(searchServer),
-        close(execServer),
-      ]);
+      await Promise.all(servers.map(close));
     },
   };
+  if (execBaseUrl) result.execBaseUrl = execBaseUrl;
+  return result;
 }
 
 function listen(app: Express): Promise<Server> {

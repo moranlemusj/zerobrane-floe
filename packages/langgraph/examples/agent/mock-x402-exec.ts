@@ -1,9 +1,13 @@
 /**
- * mock-x402-exec — local x402-style paid code-execution endpoint.
+ * mock-x402-exec — plain paid code-execution endpoint.
  *
- * POST /exec { code, language? } → CodeExecResult-shaped JSON.
- * Settles via mock-floe's /__mock/debit. **Demo only** — vm sandbox is
- * not a security boundary.
+ * Runs the submitted JS in Node's `vm` and returns the result.
+ * **Performs no settlement of its own.** The agent reaches this
+ * endpoint via Floe's facilitator (`mock-floe`'s `/v1/proxy/fetch`),
+ * which debits + forwards. From this server's perspective, the call
+ * has already been paid for.
+ *
+ * Demo only — `vm` is not a security boundary.
  */
 
 import { performance } from "node:perf_hooks";
@@ -12,11 +16,6 @@ import vm from "node:vm";
 import express, { type Express } from "express";
 
 const PORT = Number(process.env.MOCK_EXEC_PORT ?? 4043);
-const PRICE_RAW = process.env.MOCK_EXEC_PRICE_RAW ?? "50000";
-
-function getFloeUrl(): string {
-  return process.env.MOCK_FLOE_URL ?? "http://localhost:4040";
-}
 
 const app: Express = express();
 app.use(express.json({ limit: "200kb" }));
@@ -31,29 +30,6 @@ app.post("/exec", async (req, res) => {
   }
   if (language !== "javascript") {
     return res.status(400).json({ error: `unsupported language: ${language}` });
-  }
-
-  // If the request came through Floe's proxy, settlement already happened
-  // upstream; skip our own debit to avoid double-charging.
-  const alreadySettled = req.header("x-floe-settled") === "true";
-  if (!alreadySettled) {
-    const settle = await fetch(`${getFloeUrl()}/__mock/debit`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amountRaw: PRICE_RAW, reason: "mock-x402-exec" }),
-    });
-    if (!settle.ok) {
-      const body = (await settle.json().catch(() => ({}))) as { error?: string };
-      return res.status(402).json({
-        x402: true,
-        error: body.error ?? "payment_required",
-        priceRaw: PRICE_RAW,
-        asset: "0xMockUSDC",
-        network: "base",
-        payTo: "0xMockPayTo",
-        scheme: "exact",
-      });
-    }
   }
 
   const stdout: string[] = [];
@@ -95,7 +71,6 @@ app.post("/exec", async (req, res) => {
     returned: string | null;
     error?: string;
     duration_ms: number;
-    paid_usdc: string;
   } = {
     ok: !error,
     stdout: stdout.join("\n"),
@@ -107,7 +82,6 @@ app.post("/exec", async (req, res) => {
           ? returned
           : safeJson(returned),
     duration_ms,
-    paid_usdc: PRICE_RAW,
   };
   if (error) result.error = error;
   res.json(result);
@@ -125,7 +99,6 @@ const isEntryPoint = process.argv[1] && fileURLToPath(import.meta.url) === proce
 if (isEntryPoint) {
   const server = app.listen(PORT, () => {
     console.log(`[mock-x402-exec] listening on http://localhost:${PORT}`);
-    console.log(`[mock-x402-exec] settling debits to ${getFloeUrl()}`);
   });
   process.on("SIGTERM", () => server.close());
   process.on("SIGINT", () => server.close());

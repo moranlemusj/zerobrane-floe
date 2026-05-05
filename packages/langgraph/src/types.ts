@@ -26,13 +26,3 @@ export type WithFloeEvent =
       after: CreditRemaining;
     }
   | { type: "error"; phase: "preflight" | "node" | "post"; err: unknown };
-
-export interface CodeExecResult {
-  ok: boolean;
-  stdout: string;
-  stderr: string;
-  returned: string | null;
-  error?: string;
-  durationMs: number;
-  paidUsdc: string;
-}

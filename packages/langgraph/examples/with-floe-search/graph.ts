@@ -54,14 +54,18 @@ async function main() {
   const floe = createFloeClient({ apiKey: floeApiKey, baseUrl: floeBaseUrl });
   if (!REAL) await floe.setSpendLimit({ limit: toUsdc("1") });
 
-  // Inner node: POSTs to the paid search endpoint.
+
+  // Inner node: routes the paid call through Floe's facilitator. The
+  // facilitator borrows USDC against the agent's pre-authorized
+  // delegation, settles the x402 payment, and returns the upstream body.
   const searchNode = async (state: typeof State.State): Promise<Partial<typeof State.State>> => {
-    const res = await fetch(`${searchBaseUrl}/search`, {
+    const proxied = await floe.proxyFetch({
+      url: `${searchBaseUrl}/search`,
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${floeApiKey}` },
-      body: JSON.stringify({ query: state.query }),
+      headers: { "Content-Type": "application/json" },
+      body: { query: state.query },
     });
-    const body = (await res.json()) as { results: unknown[] };
+    const body = proxied.body as { results: unknown[] };
     return { results: body.results };
   };
 

@@ -171,11 +171,12 @@ app.post("/v1/proxy/fetch", async (req, res) => {
   console.log(
     `[mock-floe] proxy_fetch ${method} ${url} (price ${price}) — sessionSpent=${state.sessionSpent}`,
   );
-  // Forward the call. Tell the upstream we've already settled so it
-  // doesn't double-charge through its own /__mock/debit path.
+  // Forward the call to the upstream. Settlement happened above; the
+  // upstream sees a fully-paid request, just like a real x402 endpoint
+  // does after Floe's facilitator pays it.
   const upstreamRes = await fetch(url, {
     method,
-    headers: { ...headers, "X-Floe-Settled": "true" },
+    headers: { ...headers },
     body: body !== undefined && method !== "GET" ? JSON.stringify(body) : undefined,
   });
   const upstreamBody = await upstreamRes.json().catch(() => ({}));
