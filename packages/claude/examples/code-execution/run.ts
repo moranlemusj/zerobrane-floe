@@ -105,18 +105,22 @@ async function main() {
     tools: [
       tool(
         "run_code",
-        "Execute a JavaScript snippet in a sandboxed runtime. Returns stdout, stderr, and the returned value. Costs 0.05 USDC per call (settled via Floe).",
+        "Execute a JavaScript snippet in a sandboxed runtime. Returns stdout, stderr, and the returned value. Costs ~0.05 USDC per call (settled via Floe's facilitator).",
         { code: z.string().describe("JavaScript code to execute. Use `return` to return a value.") },
         async ({ code }) => {
-          const res = await fetch(`${execBaseUrl}/exec`, {
+          // Route through Floe's facilitator. Floe debits the agent's
+          // credit line, pays the x402 endpoint, and returns the body.
+          const proxied = await floe.proxyFetch({
+            url: `${execBaseUrl}/exec`,
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ code }),
+            body: { code },
           });
-          const body = await res.text();
           return {
-            content: [{ type: "text" as const, text: body }],
-            isError: !res.ok,
+            content: [
+              { type: "text" as const, text: JSON.stringify(proxied.body) },
+            ],
+            isError: proxied.status >= 400,
           };
         },
       ),
@@ -214,15 +218,17 @@ async function dryRun({
   );
   console.log(`[demo] dry preflight outcome: ${events[0]?.kind}`);
 
-  // Make a paid call directly (no Anthropic SDK).
-  const res = await fetch(`${execBaseUrl}/exec`, {
+  // Make a paid call through Floe's facilitator (mock-floe's /v1/proxy/fetch),
+  // skipping the Anthropic SDK call.
+  const proxied = await floe.proxyFetch({
+    url: `${execBaseUrl}/exec`,
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code: "let s = 0; for (let i = 1; i <= 10; i++) s += i; return s;" }),
+    body: { code: "let s = 0; for (let i = 1; i <= 10; i++) s += i; return s;" },
   });
-  const result = (await res.json()) as { ok: boolean; returned: string | null; paid_usdc: string };
+  const result = proxied.body as { ok: boolean; returned: string | null };
   console.log(
-    `[demo] dry exec result: ok=${result.ok} returned=${result.returned} paid=${result.paid_usdc}`,
+    `[demo] dry exec result: ok=${result.ok} returned=${result.returned} status=${proxied.status}`,
   );
 
   const after = await floe.getCreditRemaining();

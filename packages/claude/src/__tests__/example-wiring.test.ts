@@ -88,21 +88,22 @@ describe("example wiring (mock-floe + mock-exec)", () => {
     expect(outcomes[0]?.kind).toBe("ok");
   });
 
-  it("paid call to mock-exec debits mock-floe (simulated facilitator settlement)", async () => {
+  it("client.proxyFetch routes to mock-exec via mock-floe (single settlement point)", async () => {
     const before = await getMockState(mocks.floeBaseUrl);
     const beforeSpent = BigInt(before.sessionSpent);
 
-    const res = await fetch(`${mocks.execBaseUrl}/exec`, {
+    const proxied = await client.proxyFetch({
+      url: `${mocks.execBaseUrl}/exec`,
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: "return 1 + 2;" }),
+      body: { code: "return 1 + 2;" },
     });
-    expect(res.ok).toBe(true);
-    const result = (await res.json()) as { ok: boolean; returned: string | null; paid_usdc: string };
+    expect(proxied.status).toBe(200);
+    const result = proxied.body as { ok: boolean; returned: string | null };
     expect(result.ok).toBe(true);
     expect(result.returned).toBe("3");
-    expect(result.paid_usdc).toBe("50000");
 
+    // Settlement happens once, at mock-floe's /v1/proxy/fetch handler.
     const after = await getMockState(mocks.floeBaseUrl);
     expect(BigInt(after.sessionSpent)).toBe(beforeSpent + 50_000n);
     expect(BigInt(after.creditOut)).toBeGreaterThanOrEqual(50_000n);

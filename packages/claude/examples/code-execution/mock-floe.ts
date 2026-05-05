@@ -159,10 +159,46 @@ app.post("/v1/x402/estimate", (req, res) => {
   });
 });
 
-// Internal-only mock-debit endpoint. Used by the paid-endpoint mocks
-// (mock-exec.ts / mock-x402-exec.ts) to simulate facilitator settlement.
-// The published Floe client never calls this — the `__mock` prefix is loud
-// on purpose.
+app.post("/v1/proxy/fetch", async (req, res) => {
+  const { url, method = "GET", headers = {}, body } = req.body as {
+    url: string;
+    method?: string;
+    headers?: Record<string, string>;
+    body?: unknown;
+  };
+  // Settle 0.05 USDC for /exec, 0.01 USDC otherwise.
+  const price = url.endsWith("/exec") ? 50_000n : 10_000n;
+  if (price > headroom()) {
+    return res
+      .status(402)
+      .json({ x402: true, error: "insufficient_credit", priceRaw: price.toString() });
+  }
+  if (
+    state.sessionSpendLimit !== null &&
+    state.sessionSpent + price > state.sessionSpendLimit
+  ) {
+    return res
+      .status(402)
+      .json({ x402: true, error: "spend_limit_exceeded", priceRaw: price.toString() });
+  }
+  state.creditOut += price;
+  state.sessionSpent += price;
+  console.log(
+    `[mock-floe] proxy_fetch ${method} ${url} (price ${price}) — sessionSpent=${state.sessionSpent}`,
+  );
+  // Forward the call to the upstream — settlement happened above.
+  const upstreamRes = await fetch(url, {
+    method,
+    headers: { ...headers },
+    body: body !== undefined && method !== "GET" ? JSON.stringify(body) : undefined,
+  });
+  const upstreamBody = await upstreamRes.json().catch(() => ({}));
+  res.json({ status: upstreamRes.status, headers: {}, body: upstreamBody });
+});
+
+// Internal-only mock-debit endpoint kept for tests that bypass the proxy
+// path and exercise mock-floe's ledger directly. The published FloeClient
+// never calls /__mock/* — the prefix is loud on purpose.
 app.post("/__mock/debit", (req, res) => {
   const { amountRaw, reason } = req.body as { amountRaw: string; reason?: string };
   if (typeof amountRaw !== "string" || !/^\d+$/.test(amountRaw)) {
