@@ -1,0 +1,66 @@
+{
+  "name": "floe-langgraph",
+  "version": "0.1.0",
+  "description": "Floe (onchain credit for AI agents on Base) primitives for LangGraph: withFloe middleware that wraps any node with credit preflight + spend tracking, plus floeCodeExecNode for x402-paid sandboxed code execution.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "floe",
+    "langgraph",
+    "x402",
+    "credit",
+    "usdc",
+    "agent",
+    "base"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "example:with-floe-search": "tsx examples/with-floe-search/graph.ts",
+    "example:with-floe-search:real": "FLOE_REAL=1 tsx examples/with-floe-search/graph.ts",
+    "example:code-exec": "tsx examples/code-exec/graph.ts",
+    "example:code-exec:real": "FLOE_REAL=1 tsx examples/code-exec/graph.ts",
+    "prepublishOnly": "pnpm build"
+  },
+  "peerDependencies": {
+    "@langchain/core": ">=0.3.0",
+    "@langchain/langgraph": ">=0.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@langchain/core": { "optional": false },
+    "@langchain/langgraph": { "optional": false }
+  },
+  "dependencies": {
+    "@floe-agents/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@langchain/core": "^0.3.0",
+    "@langchain/langgraph": "^0.2.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.0",
+    "express": "^4.21.2",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}
