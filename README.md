@@ -8,9 +8,9 @@ Floe ships a [Coinbase AgentKit binding](https://github.com/Floe-Labs/agentkit-a
 
 | Package | What it does |
 |---|---|
-| [`@floe-agents/core`](./packages/core) | Typed REST client over Floe's live `credit-api` (`https://credit-api.floelabs.xyz`), USDC value type and helpers, shared domain types. No agent-framework dependencies. |
+| [`@floe-agents/core`](./packages/core) | Typed REST client over Floe's live `credit-api` (`https://credit-api.floelabs.xyz`), USDC value type and helpers, shared domain types. No agent-framework dependencies. The `client.proxyFetch` method is what agents use to make Floe-paid HTTP calls. |
 | [`floe-claude-agent`](./packages/claude) | Floe primitives for the Claude Agent SDK: MCP config helpers, `floeCreditPreflight` PreToolUse hook, `floeBorrowEventLogger` PostToolUse hook, spend-limit setup helpers, Floe Skill markdown. |
-| [`floe-langgraph`](./packages/langgraph) | Floe primitives for LangGraph: `withFloe` middleware that wraps any node with credit preflight + spend tracking, plus `floeCodeExecNode` for x402-paid sandboxed code execution. |
+| [`floe-langgraph`](./packages/langgraph) | Floe instrumentation middleware for LangGraph. One export — `withFloe` — wraps any node with credit preflight + spend telemetry. Two demos: `with-floe-search` (StateGraph + middleware) and `agent` (`createReactAgent` with a paid `run_code` tool). |
 
 `floe-claude-agent` and `floe-langgraph` both depend on `@floe-agents/core`. The two framework bindings are independent — pick one or both.
 
@@ -54,29 +54,35 @@ pnpm -r typecheck
 # Demos against bundled mocks (no API keys needed)
 pnpm --filter floe-claude-agent  example:agent:dry
 pnpm --filter floe-langgraph     example:with-floe-search
-pnpm --filter floe-langgraph     example:code-exec
+pnpm --filter floe-langgraph     example:agent:dry
 ```
 
 For the live-key paths, see each package's README — the env vars are: `FLOE_API_KEY` (Floe), `ANTHROPIC_API_KEY` (Claude demo), `MOCK_SEARCH_URL` / `MOCK_EXEC_URL` (real x402 endpoints).
 
-## Relationship between `withFloe` and `floeCodeExecNode`
+## Demo split — middleware vs agent
+
+The two LangGraph demos illustrate different patterns:
 
 ```
 floe-langgraph
-├── withFloe              ← generic middleware: wrap any node
-└── floeCodeExecNode      ← composed internally as withFloe(makeX402CallNode(...))
+├── withFloe (the only export)
+│
+└── examples/
+    ├── with-floe-search/  ← StateGraph + withFloe wrapping a custom paid node
+    └── agent/             ← createReactAgent with a paid `run_code` tool
+                              (mirrors the Claude package's agent demo)
 ```
 
-`floeCodeExecNode` is a one-import option for the showcase use case (x402-paid sandboxed code exec). For other paid HTTP flows — search, scrape, LLM gateways — wrap your own node with `withFloe`. Both surfaces emit the same `WithFloeEvent` types.
+For other paid HTTP flows (search, scrape, LLM gateways), wrap your own node with `withFloe`. The middleware emits structured `WithFloeEvent`s for telemetry, dashboards, and alerts. For LLM-driven agents, look at the `agent/` demo.
 
 ## Status
 
 | | Mocked tests | Build | Demo |
 |---|---|---|---|
-| `@floe-agents/core` | 60 ✅ | ✅ | n/a |
+| `@floe-agents/core` | 60 ✅ + 5 gated real-API | ✅ | n/a |
 | `floe-claude-agent` | 45 ✅ | ✅ | `example:agent:dry` ✅ |
-| `floe-langgraph` | 20 ✅ | ✅ | `example:with-floe-search` ✅ / `example:code-exec` ✅ |
-| **Total** | **125 ✅** | **3/3 ✅** | **3/3 ✅** |
+| `floe-langgraph` | 10 ✅ | ✅ | `example:with-floe-search` ✅ / `example:agent:dry` ✅ |
+| **Total** | **115 mocked ✅** | **3/3 ✅** | **3/3 demos ✅** |
 
 Real-key e2e flows are documented in each package's README and tested via `pnpm test:real` where applicable (`@floe-agents/core` only — the framework-binding real flows require live LLM keys to run end-to-end).
 
@@ -90,8 +96,8 @@ zerobrane-floe-agents/
 │   │   └── examples/code-execution/   # mock-floe, mock-exec, agent demo
 │   └── langgraph/                     # floe-langgraph
 │       └── examples/
-│           ├── with-floe-search/      # mock-search, withFloe demo
-│           ├── code-exec/             # mock-x402-exec, floeCodeExecNode demo
+│           ├── with-floe-search/      # StateGraph + withFloe demo
+│           ├── agent/                 # createReactAgent + paid run_code tool
 │           └── lib/                   # shared mock-floe + start helpers
 ├── pnpm-workspace.yaml
 ├── tsconfig.base.json

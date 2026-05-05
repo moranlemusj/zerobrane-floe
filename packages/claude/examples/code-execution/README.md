@@ -6,8 +6,8 @@ Spawns two in-process mock servers and runs a Claude Agent SDK agent that uses a
 
 | File | What it does |
 |---|---|
-| `mock-floe.ts` | Express server mirroring Floe's live `credit-api`. In-memory state. Exposes the standard `/v1/agents/*` and `/v1/x402/estimate` shapes plus an internal-only `/__mock/debit` endpoint used to simulate facilitator settlement. **The published `FloeClient` never calls `/__mock/*`.** |
-| `mock-exec.ts` | Express server simulating an x402-paid code-execution endpoint. On every `POST /exec` it calls mock-floe's `/__mock/debit`. Runs JS in Node's `vm` module — demo only, not a security boundary. |
+| `mock-floe.ts` | Express server mirroring Floe's live `credit-api`. In-memory state. Exposes the standard `/v1/agents/*` + `/v1/x402/estimate` + `/v1/proxy/fetch` shapes. The proxy handler is the **single settlement point** — it debits + forwards to the upstream. Internal `/__mock/{debit,state,reset}` paths exist for tests that bypass the proxy and inspect/mutate the ledger directly; the published `FloeClient` never calls `/__mock/*`. |
+| `mock-exec.ts` | Plain x402-paid code-execution endpoint. Runs JS in Node's `vm` and returns the result. **Performs no settlement of its own** — the agent reaches it via mock-floe's `/v1/proxy/fetch`, which has already debited + forwarded. Demo only, not a security boundary. |
 | `lib.ts` | Shared helpers — boots both mocks on ephemeral ports, exposes the URLs to tests / demos. |
 | `run.ts` | The demo orchestrator. Three run modes: `:dry`, default (mock + Claude), `:real` (live Floe + live Claude). |
 
@@ -24,8 +24,8 @@ What you should see:
 - Spend limit applied (5 USDC).
 - Initial credit: `available=0 headroom=10 util=0bps`.
 - Preflight outcome: `ok`.
-- Mock-floe logs a debit of 50000 raw (0.05 USDC) when mock-exec settles.
-- Result: `1+2+...+10 = 55`.
+- `[mock-floe] proxy_fetch POST .../exec (price 50000) — sessionSpent=50000` — the single settlement point.
+- Result: `1+2+...+10 = 55`, status=200.
 - Credit after: `sessionSpent=0.05 util=50bps`.
 
 This path runs the full Floe wiring (preflight, settlement, ledger updates) without any Anthropic call — useful for CI and for verifying the binding works before plugging in keys.
@@ -57,7 +57,7 @@ Everything points at the production stack. `MOCK_EXEC_URL` is the x402-protected
 | Floe `credit-api` base URL | `http://127.0.0.1:<random>` | `https://credit-api.floelabs.xyz` |
 | Floe API key | `"mock-key"` (any string) | `floe_live_...` from dev-dashboard.floelabs.xyz |
 | x402 endpoint | local Express on `:<random>/exec` | URL of your real x402 service |
-| Settlement | mock-floe's `/__mock/debit` (in-memory ledger) | Floe facilitator + on-chain transactions |
+| Settlement | mock-floe's `/v1/proxy/fetch` (in-memory ledger; debits + forwards) | Floe facilitator + on-chain transactions |
 | Spend cap | `floeApplySpendLimit({ limit: toUsdc("5") })` | same — Floe enforces server-side either way |
 
 The binding code is unchanged across modes — only the URLs and keys flip via env.
