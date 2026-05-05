@@ -1,13 +1,15 @@
 /**
- * Mocked e2e test for the with-floe-search example.
+ * Mocked e2e tests for both example demos.
  *
- * Boots mock-floe + mock-search on ephemeral ports, runs a StateGraph
- * with a withFloe-wrapped node that uses client.proxyFetch, and verifies
- * the mock-floe ledger reflects the expected debit.
+ * Boots mock-floe + the upstream paid endpoints on ephemeral ports,
+ * runs the actual demo wiring, and verifies the mock-floe ledger
+ * reflects the expected debit. Neither test invokes Anthropic.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { tool } from "@langchain/core/tools";
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
+import { z } from "zod";
 import { createFloeClient, type FloeClient } from "@floe-agents/core";
 import {
   getMockState,
@@ -21,7 +23,7 @@ let mocks: MockEndpoints;
 let floe: FloeClient;
 
 beforeAll(async () => {
-  mocks = await startMockServers();
+  mocks = await startMockServers({ withAgentExec: true });
   floe = createFloeClient({ apiKey: "mock-key", baseUrl: mocks.floeBaseUrl });
 }, 10_000);
 
@@ -80,5 +82,51 @@ describe("with-floe-search example wiring", () => {
 
     const state = await getMockState(mocks.floeBaseUrl);
     expect(BigInt(state.sessionSpent)).toBe(10_000n);
+  });
+});
+
+describe("agent example wiring (no Anthropic call)", () => {
+  it("the run_code tool routes through floe.proxyFetch and debits via mock-floe", async () => {
+    await fetch(`${mocks.floeBaseUrl}/__mock/reset`, { method: "POST" });
+    expect(mocks.execBaseUrl).toBeDefined();
+
+    const events: { delta: bigint; status: number }[] = [];
+    const runCode = tool(
+      async (input: { code: string }) => {
+        const before = await floe.getCreditRemaining();
+        const proxied = await floe.proxyFetch({
+          url: `${mocks.execBaseUrl}/exec`,
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: { code: input.code, language: "javascript" },
+        });
+        const after = await floe.getCreditRemaining();
+        events.push({
+          delta: after.sessionSpent - before.sessionSpent,
+          status: proxied.status,
+        });
+        return JSON.stringify(proxied.body);
+      },
+      {
+        name: "run_code",
+        description: "Run JS via Floe.",
+        schema: z.object({ code: z.string() }),
+      },
+    );
+
+    const out = await runCode.invoke({
+      code: "let s=0; for(let i=1;i<=10;i++) s+=i*i; return s;",
+    });
+    const parsed = JSON.parse(out as string) as { ok: boolean; returned: string | null };
+    // 1*1 + 2*2 + ... + 10*10 = 385
+    expect(parsed.ok).toBe(true);
+    expect(parsed.returned).toBe("385");
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.status).toBe(200);
+    expect(events[0]?.delta).toBe(50_000n);
+
+    const state = await getMockState(mocks.floeBaseUrl);
+    expect(BigInt(state.sessionSpent)).toBe(50_000n);
   });
 });

@@ -37,8 +37,9 @@
     "typecheck": "tsc --noEmit",
     "example:with-floe-search": "tsx examples/with-floe-search/graph.ts",
     "example:with-floe-search:real": "FLOE_REAL=1 tsx examples/with-floe-search/graph.ts",
-    "example:code-exec": "tsx examples/code-exec/graph.ts",
-    "example:code-exec:real": "FLOE_REAL=1 tsx examples/code-exec/graph.ts",
+    "example:agent": "tsx examples/agent/graph.ts",
+    "example:agent:dry": "FLOE_DRY_RUN=1 tsx examples/agent/graph.ts",
+    "example:agent:real": "FLOE_REAL=1 tsx examples/agent/graph.ts",
     "prepublishOnly": "pnpm build"
   },
   "peerDependencies": {
@@ -53,6 +54,7 @@
     "@floe-agents/core": "workspace:*"
   },
   "devDependencies": {
+    "@langchain/anthropic": "^0.3.0",
     "@langchain/core": "^0.3.0",
     "@langchain/langgraph": "^0.2.0",
     "@types/express": "^5.0.0",
@@ -61,6 +63,7 @@
     "tsup": "^8.3.5",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "zod": "^3.24.1"
   }
 }
