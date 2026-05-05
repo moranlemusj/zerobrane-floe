@@ -29,3 +29,6 @@ export {
 } from "./types.js";
 
 export type { AuthContext, AuthMode } from "./auth.js";
+
+export type { FloeClient, FloeClientOptions } from "./client.js";
+export { createFloeClient, FloeClientError } from "./client.js";
