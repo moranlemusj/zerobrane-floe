@@ -1,62 +1,85 @@
-import { sql } from "drizzle-orm";
-import { createDb, loans, markets } from "@floe-dashboard/data";
+import Link from "next/link";
+import { Filters } from "@/components/Filters";
+import { KpiCards } from "@/components/KpiCards";
+import { LoanTable } from "@/components/LoanTable";
+import { getKpis, listLoans, type LoanQueryOptions } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
-  const db = createDb();
-  const [marketsCount, loansCount, dbInfo] = await Promise.all([
-    db.execute(sql`SELECT COUNT(*)::int AS c FROM ${markets}`),
-    db.execute(sql`SELECT COUNT(*)::int AS c FROM ${loans}`),
-    db.execute(sql`SELECT now() AS now, current_database() AS db`),
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = flatten(await searchParams);
+
+  const limit = clampInt(params.limit, 50, 1, 200);
+  const offset = clampInt(params.offset, 0, 0, 1_000_000);
+  const sort = (params.sort as LoanQueryOptions["sort"]) ?? "currentLtv";
+  const dir = (params.dir as LoanQueryOptions["direction"]) ?? "desc";
+
+  const filter: LoanQueryOptions["filter"] = {};
+  if (params.state) filter.state = params.state as never;
+  if (params.collateral) filter.collateralToken = params.collateral;
+
+  const [{ rows, total }, kpis] = await Promise.all([
+    listLoans({ filter, sort, direction: dir, limit, offset }),
+    getKpis(),
   ]);
 
   return (
     <main className="space-y-6">
-      <header>
-        <h1 className="text-3xl font-semibold tracking-tight">Floe Dashboard</h1>
-        <p className="text-sm text-[color:var(--muted)] mt-1">
-          Real-time view of every active loan on Floe's onchain credit protocol.
-        </p>
+      <header className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Floe — Loan Dashboard</h1>
+          <p className="text-sm text-[color:var(--muted)] mt-1">
+            Real-time view of every loan on Floe's onchain credit protocol on Base.
+          </p>
+        </div>
+        <nav className="flex items-center gap-3 text-sm">
+          <Link href="/" className="px-2 py-1 hover:underline">
+            Loans
+          </Link>
+          <Link href="/markets" className="px-2 py-1 hover:underline">
+            Markets
+          </Link>
+        </nav>
       </header>
 
-      <section className="rounded-lg border border-white/10 bg-white/[0.02] p-6">
-        <h2 className="text-lg font-medium mb-3">Phase 2 wiring check</h2>
-        <p className="text-sm text-[color:var(--muted)] mb-4">
-          The Next app + Neon + indexer are wired together. Below is a live read from
-          the database. Phase 3 fills it with chain data.
-        </p>
-        <dl className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
-          <div>
-            <dt className="text-[color:var(--muted)]">Markets in DB</dt>
-            <dd className="text-2xl font-mono mt-1">
-              {(marketsCount.rows[0] as { c: number }).c}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-[color:var(--muted)]">Loans in DB</dt>
-            <dd className="text-2xl font-mono mt-1">
-              {(loansCount.rows[0] as { c: number }).c}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-[color:var(--muted)]">DB</dt>
-            <dd className="text-sm font-mono mt-1 break-all">
-              {(dbInfo.rows[0] as { db: string }).db}
-            </dd>
-          </div>
-        </dl>
-      </section>
+      <KpiCards kpis={kpis} />
 
-      <section className="rounded-lg border border-white/10 bg-white/[0.02] p-6">
-        <h2 className="text-lg font-medium mb-3">What's next</h2>
-        <ul className="text-sm text-[color:var(--muted)] space-y-1 list-disc pl-5">
-          <li>Phase 3 — indexer subscribes to matcher + Chainlink, populates the DB</li>
-          <li>Phase 4 — loan table, filters, market aggregates land here</li>
-          <li>Phase 5 — /chat with read-only tools over the same DB</li>
-          <li>Phase 6 — /me with EIP-191 wallet sign-in</li>
-        </ul>
-      </section>
+      <Filters searchParams={params} />
+
+      <LoanTable
+        rows={rows}
+        total={total}
+        offset={offset}
+        limit={limit}
+        searchParams={params}
+      />
     </main>
   );
+}
+
+function clampInt(
+  raw: string | undefined,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  if (raw === undefined) return fallback;
+  const n = Number.parseInt(raw, 10);
+  if (Number.isNaN(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
+function flatten(
+  sp: Record<string, string | string[] | undefined>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(sp)) {
+    if (typeof v === "string") out[k] = v;
+    else if (Array.isArray(v) && v[0] !== undefined) out[k] = v[0];
+  }
+  return out;
 }
