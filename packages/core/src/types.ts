@@ -205,3 +205,61 @@ export interface BorrowEvent {
   details: unknown;
   timestamp: number;
 }
+
+// -----------------------------------------------------------------------------
+// Public-endpoint shapes — verified live against credit-api.floelabs.xyz on Base
+// mainnet (2026-05-06). Source: live probes in scripts/discover.ts.
+// -----------------------------------------------------------------------------
+
+export interface MarketTokenInfo {
+  address: `0x${string}`;
+  symbol: string;
+  decimals: number;
+}
+
+export interface Market {
+  marketId: `0x${string}`;
+  loanToken: MarketTokenInfo;
+  collateralToken: MarketTokenInfo;
+  isActive: boolean;
+}
+
+export interface MarketsResponse {
+  markets: Market[];
+}
+
+/** Open lender offer published to Floe's intent book. */
+export interface CreditOffer {
+  offerHash: `0x${string}`;
+  lender: `0x${string}`;
+  onBehalfOf: `0x${string}`;
+  /** Total USDC the lender is offering (raw, decimal string on the wire). */
+  amount: UsdcAmount;
+  /** USDC already filled by matched borrowers. */
+  filledAmount: UsdcAmount;
+  /** USDC still available to fill. */
+  remainingAmount: UsdcAmount;
+  /** Smallest fill the lender accepts per match. */
+  minFillAmount: UsdcAmount;
+  minInterestRateBps: number;
+  maxLtvBps: number;
+  /** Seconds. */
+  minDuration: number;
+  /** Seconds. */
+  maxDuration: number;
+  allowPartialFill: boolean;
+  /** Unix timestamp; offer is inactive before this. */
+  validFromTimestamp: number;
+  /** Unix timestamp; offer expires after this. */
+  expiry: number;
+  marketId: `0x${string}`;
+  salt: `0x${string}`;
+  /** Seconds of overdue tolerance before liquidation is permitted. */
+  gracePeriod: number;
+  /** Minimum interest the borrower will owe in bps, regardless of duration. */
+  minInterestBps: number;
+}
+
+export interface CreditOffersResponse {
+  offers: CreditOffer[];
+}

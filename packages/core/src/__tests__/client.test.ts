@@ -476,10 +476,65 @@ describe("FloeClient — public endpoints", () => {
     client = createFloeClient({ baseUrl: "https://api.test", fetch: mock.fetch });
   });
 
-  it("getMarkets does not require apiKey", async () => {
-    mock.setNextResponse({ body: { markets: [] } });
-    await expect(client.getMarkets()).resolves.toBeDefined();
+  it("getMarkets does not require apiKey and parses the live shape", async () => {
+    mock.setNextResponse({
+      body: {
+        markets: [
+          {
+            marketId: "0xfe92656527bae8e6d37a9e0bb785383fbb33f1f0c7e29fdd733f5af7390c2930",
+            loanToken: { address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", symbol: "USDC", decimals: 6 },
+            collateralToken: { address: "0x4200000000000000000000000000000000000006", symbol: "WETH", decimals: 18 },
+            isActive: true,
+          },
+        ],
+      },
+    });
+    const result = await client.getMarkets();
     expect(mock.captured[0]?.headers.authorization).toBeUndefined();
+    expect(result.markets).toHaveLength(1);
+    expect(result.markets[0]?.loanToken.symbol).toBe("USDC");
+    expect(result.markets[0]?.collateralToken.decimals).toBe(18);
+    expect(result.markets[0]?.isActive).toBe(true);
+  });
+
+  it("getCreditOffers parses the live shape (decimal strings → bigint, numeric fields → number)", async () => {
+    mock.setNextResponse({
+      body: {
+        offers: [
+          {
+            offerHash: "0x774e5d5cff2864a4ebc3e95162af2789a25e638560fbd21a352d7ad1b1be8bec",
+            lender: "0x775ee04ab58cf2b9b42bf37ec0d88fdeb6109238",
+            onBehalfOf: "0x775ee04ab58cf2b9b42bf37ec0d88fdeb6109238",
+            amount: "5000000",
+            filledAmount: "0",
+            remainingAmount: "5000000",
+            minFillAmount: "5000000",
+            minInterestRateBps: "50",
+            maxLtvBps: "7000",
+            minDuration: "1814400",
+            maxDuration: "3283200",
+            allowPartialFill: true,
+            validFromTimestamp: "1777311471",
+            expiry: "1778521071",
+            marketId: "0xfe92656527bae8e6d37a9e0bb785383fbb33f1f0c7e29fdd733f5af7390c2930",
+            salt: "0xcf51674a12fddfdf7a805bfce3d036e8c2b5c3234dd143f99f109976176d1b3b",
+            gracePeriod: "0",
+            minInterestBps: "5000",
+          },
+        ],
+      },
+    });
+    const result = await client.getCreditOffers();
+    expect(result.offers).toHaveLength(1);
+    const offer = result.offers[0]!;
+    expect(offer.amount).toBe(5_000_000n);
+    expect(offer.remainingAmount).toBe(5_000_000n);
+    expect(offer.minInterestRateBps).toBe(50);
+    expect(offer.maxLtvBps).toBe(7000);
+    expect(offer.minDuration).toBe(1_814_400);
+    expect(offer.expiry).toBe(1_778_521_071);
+    expect(offer.allowPartialFill).toBe(true);
+    expect(offer.minInterestBps).toBe(5000);
   });
 
   it("getCreditOffers serializes minAmount as raw decimal string", async () => {

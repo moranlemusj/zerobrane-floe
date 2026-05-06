@@ -28,4 +28,8 @@ pnpm-debug.log*
 
 # Local working files (not part of the published repo)
 zerobrane-floe-agents-PRD.md
+floe-dashboard-PRD.md
 CHECKLIST.md
+discovery-report.md
+.env
+.env.*

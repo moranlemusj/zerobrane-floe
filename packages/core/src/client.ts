@@ -1,13 +1,17 @@
 import { type AuthContext, type AuthMode, buildAuthHeaders } from "./auth.js";
-import { rawToUsdc, rawToUsdcNullable, usdcToRaw } from "./coerce.js";
+import { bpsToNumber, numberToInt, rawToUsdc, rawToUsdcNullable, usdcToRaw } from "./coerce.js";
 import type {
   AgentBalance,
+  CreditOffer,
+  CreditOffersResponse,
   CreditRemaining,
   CreditThreshold,
   InstantBorrowParams,
   InstantBorrowResult,
   LoanState,
   LoanStateName,
+  Market,
+  MarketsResponse,
   PreRegisterResult,
   ProxyCheckResult,
   ProxyFetchResult,
@@ -98,7 +102,24 @@ export interface FloeClient {
   repayAndReborrow(
     params: InstantBorrowParams & { loanId: string },
   ): Promise<{ repayTransactions: UnsignedTx[]; reborrowTransactions: UnsignedTx[] }>;
+  /**
+   * Per-loan rich detail (LTV, buffer, accruedInterest, isHealthy, ...).
+   *
+   * Returns `unknown` because the live shape couldn't be verified against our
+   * developer Bearer key on 2026-05-06 — the endpoint returned 401 "Invalid
+   * API key" even for verified-real loan IDs, suggesting it requires
+   * wallet-signature auth or full agent registration. If your key has those,
+   * cast the response to your local type.
+   */
   getLoanStatus(loanId: string): Promise<unknown>;
+  /**
+   * Per-wallet positions + summary.
+   *
+   * Returns `unknown` because the live endpoint returned **500 Internal
+   * Server Error** for every wallet we tried on 2026-05-06 (Floe-side bug,
+   * not auth). Once Floe's API is fixed, type the response based on the
+   * shape documented at https://floe-labs.gitbook.io/docs/developers/credit-api.
+   */
   getPositions(
     wallet: string,
     query?: Record<string, string | number | boolean | undefined>,
@@ -117,13 +138,15 @@ export interface FloeClient {
   }): Promise<{ txHash: string; receipt?: unknown }>;
 
   // Public (no auth)
-  getMarkets(): Promise<unknown>;
+  /** Returns the catalog of supported lending pairs. Verified shape (2026-05-06). */
+  getMarkets(): Promise<MarketsResponse>;
+  /** Returns open lender offers, optionally filtered. Verified shape (2026-05-06). */
   getCreditOffers(query?: {
     marketId?: string;
     minAmount?: UsdcAmount;
     maxRateBps?: number;
     maxResults?: number;
-  }): Promise<unknown>;
+  }): Promise<CreditOffersResponse>;
   getCostOfCapital(
     marketId: string,
     query: { borrowAmount: UsdcAmount; duration: number },
@@ -438,15 +461,23 @@ export function createFloeClient(opts: FloeClientOptions = {}): FloeClient {
     },
 
     async getMarkets() {
-      return await request<unknown>({
+      const r = await request<RawMarketsResponse>({
         method: "GET",
         path: "/v1/markets",
         authMode: "public",
       });
+      return {
+        markets: r.markets.map<Market>((m) => ({
+          marketId: m.marketId,
+          loanToken: m.loanToken,
+          collateralToken: m.collateralToken,
+          isActive: m.isActive,
+        })),
+      };
     },
 
     async getCreditOffers(query) {
-      return await request<unknown>({
+      const r = await request<RawCreditOffersResponse>({
         method: "GET",
         path: "/v1/credit/offers",
         query: query
@@ -459,6 +490,7 @@ export function createFloeClient(opts: FloeClientOptions = {}): FloeClient {
           : undefined,
         authMode: "public",
       });
+      return { offers: r.offers.map(parseCreditOffer) };
     },
 
     async getCostOfCapital(marketId, { borrowAmount, duration }) {
@@ -717,4 +749,63 @@ function parseInstantBorrow(r: RawInstantBorrowResult): InstantBorrowResult {
     };
   }
   return out;
+}
+
+interface RawMarket {
+  marketId: `0x${string}`;
+  loanToken: { address: `0x${string}`; symbol: string; decimals: number };
+  collateralToken: { address: `0x${string}`; symbol: string; decimals: number };
+  isActive: boolean;
+}
+
+interface RawMarketsResponse {
+  markets: RawMarket[];
+}
+
+interface RawCreditOffer {
+  offerHash: `0x${string}`;
+  lender: `0x${string}`;
+  onBehalfOf: `0x${string}`;
+  amount: string;
+  filledAmount: string;
+  remainingAmount: string;
+  minFillAmount: string;
+  minInterestRateBps: string | number;
+  maxLtvBps: string | number;
+  minDuration: string | number;
+  maxDuration: string | number;
+  allowPartialFill: boolean;
+  validFromTimestamp: string | number;
+  expiry: string | number;
+  marketId: `0x${string}`;
+  salt: `0x${string}`;
+  gracePeriod: string | number;
+  minInterestBps: string | number;
+}
+
+interface RawCreditOffersResponse {
+  offers: RawCreditOffer[];
+}
+
+function parseCreditOffer(r: RawCreditOffer): CreditOffer {
+  return {
+    offerHash: r.offerHash,
+    lender: r.lender,
+    onBehalfOf: r.onBehalfOf,
+    amount: rawToUsdc(r.amount),
+    filledAmount: rawToUsdc(r.filledAmount),
+    remainingAmount: rawToUsdc(r.remainingAmount),
+    minFillAmount: rawToUsdc(r.minFillAmount),
+    minInterestRateBps: bpsToNumber(r.minInterestRateBps),
+    maxLtvBps: bpsToNumber(r.maxLtvBps),
+    minDuration: numberToInt(r.minDuration),
+    maxDuration: numberToInt(r.maxDuration),
+    allowPartialFill: r.allowPartialFill,
+    validFromTimestamp: numberToInt(r.validFromTimestamp),
+    expiry: numberToInt(r.expiry),
+    marketId: r.marketId,
+    salt: r.salt,
+    gracePeriod: numberToInt(r.gracePeriod),
+    minInterestBps: bpsToNumber(r.minInterestBps),
+  };
 }

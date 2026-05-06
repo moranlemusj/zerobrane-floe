@@ -16,6 +16,11 @@ export type {
   PreRegisterResult,
   RegisterResult,
   BorrowEvent,
+  Market,
+  MarketTokenInfo,
+  MarketsResponse,
+  CreditOffer,
+  CreditOffersResponse,
 } from "./types.js";
 
 export {
