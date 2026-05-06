@@ -25,7 +25,7 @@ import pino from "pino";
 import { getResolvedAbis } from "./abis";
 import { backfillEvents } from "./backfill";
 import { discoverLoanIds } from "./bootstrap-loans";
-import { buildClients } from "./clients";
+import { buildClientsWithFallback } from "./clients";
 import { hydrateLoans } from "./hydrate";
 import { syncMarkets } from "./markets";
 import { initialOracleSync } from "./oracle";
@@ -40,8 +40,15 @@ const RECONCILE_INTERVAL_MS = Number(process.env.RECONCILE_INTERVAL_MS ?? 10 * 6
 async function main() {
   log.info({ phase: "startup", oneShot: ONE_SHOT }, "indexer booting");
 
-  const clients = buildClients();
-  log.info({ transport: clients.hasWebSocket ? "wss" : "http (polling)" }, "clients ready");
+  const clients = await buildClientsWithFallback();
+  for (const w of clients.warnings) log.warn({}, w);
+  log.info(
+    {
+      transport: clients.hasWebSocket ? "wss" : "http (polling)",
+      rpcSource: clients.rpcSource,
+    },
+    "clients ready",
+  );
 
   const ping = await clients.db.execute(
     sql`SELECT 1 AS ok, now() AS now, current_database() AS db`,
@@ -65,7 +72,9 @@ async function main() {
   const head = await clients.httpClient.getBlockNumber();
   let lastBlock = await getLastBlock(clients.db);
   if (lastBlock === 0n) {
-    const lookback = 100_000n;
+    // Configurable to keep first-run backfill manageable on Alchemy free
+    // (10-block chunks). Default 1000 blocks ≈ 33 min of history.
+    const lookback = BigInt(process.env.INITIAL_LOOKBACK_BLOCKS ?? 1000);
     lastBlock = head > lookback ? head - lookback : 0n;
     await setLastBlock(clients.db, lastBlock);
     log.info({ head, lastBlock, lookback }, "seeded lastBlock for first run");

@@ -13,8 +13,17 @@ import { applyEvent } from "./events";
 import type { IndexerClients } from "./clients";
 import { CONTRACTS } from "./contracts";
 
-/** Public Base RPCs limit getLogs to ~10k blocks per request. */
-const BACKFILL_CHUNK_BLOCKS = 9_500n;
+/**
+ * getLogs chunk size in blocks. Limits vary by RPC provider:
+ *   - Alchemy free tier: 10 (hard cap, returns -32600)
+ *   - llamarpc / public:  ~9_500
+ *   - Alchemy PAYG / paid: 2000+
+ *
+ * Default 10 → safe for Alchemy free. Bump via env if you have a paid
+ * plan or are using llamarpc. First-time backfill scales linearly:
+ * (head - lastBlock) / chunkSize requests, ~100ms each.
+ */
+const BACKFILL_CHUNK_BLOCKS = BigInt(process.env.BACKFILL_CHUNK_BLOCKS ?? 10);
 
 export interface BackfillResult {
   totalLogs: number;
