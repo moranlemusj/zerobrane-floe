@@ -24,6 +24,7 @@ import { sql } from "drizzle-orm";
 import pino from "pino";
 import { getResolvedAbis } from "./abis";
 import { backfillEvents } from "./backfill";
+import { backfillCloseTimestamps, backfillInitialConditions } from "./backfill-initial";
 import { discoverLoanIds } from "./bootstrap-loans";
 import { buildClientsWithFallback } from "./clients";
 import { enrichUnknownMarkets } from "./enrich-markets";
@@ -122,6 +123,16 @@ async function main() {
       head,
     );
     log.info(hr, "hydration done");
+
+    // Idempotent — only touches loans missing initialPrincipalRaw / closedAtBlock.
+    const ic = await backfillInitialConditions(clients, log.child({ phase: "initial" }));
+    if (ic.updated + ic.skipped + ic.missing > 0) {
+      log.info(ic, "initial-conditions backfill done");
+    }
+    const ct = await backfillCloseTimestamps(clients.db);
+    if (ct.updated + ct.skipped > 0) {
+      log.info(ct, "close-timestamps backfill done");
+    }
   }
 
   await initialOracleSync(clients, head);
@@ -163,8 +174,16 @@ async function main() {
           result.loanIdsTouched,
           newHead,
         );
+        const ic = await backfillInitialConditions(clients, log.child({ phase: "reconcile-init" }));
+        const ct = await backfillCloseTimestamps(clients.db);
         log.info(
-          { ...hr, totalLogs: result.totalLogs, loanIds: result.loanIdsTouched.length },
+          {
+            ...hr,
+            initialConditions: ic,
+            closeTimestamps: ct,
+            totalLogs: result.totalLogs,
+            loanIds: result.loanIdsTouched.length,
+          },
           "reconcile + hydrate done",
         );
       } else {

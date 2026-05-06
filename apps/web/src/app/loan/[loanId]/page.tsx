@@ -7,6 +7,7 @@ import {
   formatAmount,
   healthBand,
   shortAddress,
+  toHumanNumber,
   tokenInfo,
 } from "@/lib/format";
 import { getLoan, getLoanEvents, getOracleByDescription } from "@/lib/queries-loan";
@@ -34,29 +35,59 @@ export default async function LoanDetailPage({
 
   const events = await getLoanEvents(loanId);
 
-  // Pick the oracle for this loan's collateral asset for the stress simulator.
-  const oracleDescription =
-    collateralTok.symbol === "WETH"
-      ? "ETH / USD"
-      : collateralTok.symbol === "cbBTC"
-        ? "BTC / USD"
-        : null;
+  const ORACLE_BY_SYMBOL: Record<string, string> = {
+    WETH: "ETH / USD",
+    cbBTC: "BTC / USD",
+  };
+  const oracleDescription = ORACLE_BY_SYMBOL[collateralTok.symbol] ?? null;
   const oracle = oracleDescription ? await getOracleByDescription(oracleDescription) : null;
-  const collateralPriceUsd = oracle
-    ? Number(oracle.latestAnswer) / 10 ** oracle.decimals
-    : null;
-  const collateralAmountHuman = Number(loan.collateralAmountRaw) / 10 ** collateralTok.decimals;
+  const collateralPriceUsd = oracle ? toHumanNumber(oracle.latestAnswer, oracle.decimals) : null;
+  const collateralAmountHuman = toHumanNumber(loan.collateralAmountRaw, collateralTok.decimals);
   const collateralUsdValue =
     collateralPriceUsd !== null ? collateralAmountHuman * collateralPriceUsd : null;
-  const principalHuman = Number(loan.principalRaw) / 10 ** loanTok.decimals;
+  const principalHuman = toHumanNumber(loan.principalRaw, loanTok.decimals);
+  const accruedHuman = toHumanNumber(loan.accruedInterestRaw, loanTok.decimals);
+  // True outstanding for an active loan = principal + accrued interest.
+  // (Floe's `principal` field is stored at origination, not increased
+  // over time — accrued lives in a separate slot.) For closed loans
+  // principalRaw is 0, so outstanding is also 0.
+  const outstandingDebtHuman = principalHuman + accruedHuman;
+  const initialPrincipalHuman = loan.initialPrincipalRaw
+    ? toHumanNumber(loan.initialPrincipalRaw, loanTok.decimals)
+    : null;
+  const initialCollateralHuman = loan.initialCollateralAmountRaw
+    ? toHumanNumber(loan.initialCollateralAmountRaw, collateralTok.decimals)
+    : null;
+  const isClosed = loan.state !== "active" && loan.state !== "pending";
   const buffer =
-    loan.currentLtvBps != null ? loan.liquidationLtvBps - loan.currentLtvBps : null;
+    !isClosed && loan.currentLtvBps != null
+      ? loan.liquidationLtvBps - loan.currentLtvBps
+      : null;
 
   const startDate = loan.startTime ? new Date(Number(loan.startTime) * 1000) : null;
   const maturityUnix = loan.startTime + loan.duration;
   const maturityDate = new Date(Number(maturityUnix) * 1000);
   const now = Math.floor(Date.now() / 1000);
   const isOverdue = loan.state === "active" && BigInt(now) > maturityUnix;
+
+  const closedAt = loan.closedAtTimestamp
+    ? new Date(Number(loan.closedAtTimestamp) * 1000)
+    : null;
+  const heldSeconds = computeHeldSeconds(loan, isClosed, now);
+  const heldDays = heldSeconds !== null ? heldSeconds / 86400 : null;
+  const termDays = Number(loan.duration) / 86400;
+  const termPctUsed =
+    heldDays !== null && termDays > 0 ? (heldDays / termDays) * 100 : null;
+  const closedHow: "early" | "on_time" | "overdue" | null = !isClosed
+    ? null
+    : termPctUsed === null
+      ? null
+      : termPctUsed < 95
+        ? "early"
+        : termPctUsed > 105
+          ? "overdue"
+          : "on_time";
+  const heldDisplay = formatHeld(heldDays, termDays, termPctUsed, isClosed);
 
   return (
     <main className="space-y-6">
@@ -79,6 +110,19 @@ export default async function LoanDetailPage({
                 Overdue
               </span>
             )}
+            {closedHow && (
+              <span
+                className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                  closedHow === "early"
+                    ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30"
+                    : closedHow === "overdue"
+                      ? "bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/30"
+                      : "bg-zinc-500/15 text-zinc-300 ring-1 ring-zinc-500/30"
+                }`}
+              >
+                Closed {closedHow.replace("_", " ")}
+              </span>
+            )}
             {loan.operator && (
               <span className="text-[11px] text-[color:var(--muted)]">
                 Facilitator-operated ·{" "}
@@ -96,33 +140,112 @@ export default async function LoanDetailPage({
         </div>
       </header>
 
-      <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <Stat label="Principal" value={`${principalHuman} ${loanTok.symbol}`} />
-        <Stat
-          label="Collateral"
-          value={`${collateralAmountHuman.toLocaleString(undefined, {
-            maximumFractionDigits: 6,
-          })} ${collateralTok.symbol}`}
-          sub={
-            collateralUsdValue !== null
-              ? `$${collateralUsdValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
-              : undefined
-          }
-        />
-        <Stat
-          label="Current LTV"
-          value={loan.currentLtvBps != null ? `${(loan.currentLtvBps / 100).toFixed(2)}%` : "—"}
-          sub={`liq @ ${(loan.liquidationLtvBps / 100).toFixed(2)}%`}
-        />
-        <Stat
-          label="Buffer"
-          value={buffer != null ? `${(buffer / 100).toFixed(2)} pp` : "—"}
-        />
-        <Stat label="Interest rate" value={`${(loan.interestRateBps / 100).toFixed(2)}%`} />
-        <Stat
-          label="Accrued interest"
-          value={`${formatAmount(loan.accruedInterestRaw, loanTok.decimals, 6)} ${loanTok.symbol}`}
-        />
+      <section className="space-y-2">
+        <h2 className="text-[11px] uppercase tracking-wide text-[color:var(--muted)]">
+          At origination
+        </h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Stat
+            label="Borrowed"
+            value={
+              initialPrincipalHuman !== null
+                ? `${initialPrincipalHuman.toLocaleString(undefined, {
+                    maximumFractionDigits: 6,
+                  })} ${loanTok.symbol}`
+                : "—"
+            }
+            sub="initial principal"
+          />
+          <Stat
+            label="Collateral posted"
+            value={
+              initialCollateralHuman !== null
+                ? `${initialCollateralHuman.toLocaleString(undefined, {
+                    maximumFractionDigits: 8,
+                  })} ${collateralTok.symbol}`
+                : "—"
+            }
+            sub={`initial LTV ${(loan.ltvBps / 100).toFixed(2)}%`}
+          />
+          <Stat
+            label="Interest rate"
+            value={`${(loan.interestRateBps / 100).toFixed(2)}%`}
+            sub={`${(termDays).toFixed(1)}-day term`}
+          />
+          <Stat
+            label="Matched"
+            value={
+              loan.matchedAtBlock
+                ? `block ${loan.matchedAtBlock.toString()}`
+                : `block ${loan.createdAtBlock.toString()}`
+            }
+            sub={
+              loan.matchedAtTx
+                ? `tx ${loan.matchedAtTx.slice(0, 8)}…${loan.matchedAtTx.slice(-4)}`
+                : "no match tx in DB"
+            }
+          />
+        </div>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-[11px] uppercase tracking-wide text-[color:var(--muted)]">
+          Current state
+        </h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <Stat
+            label="Outstanding debt"
+            value={`${outstandingDebtHuman.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${loanTok.symbol}`}
+            sub={isClosed ? "loan closed" : "principal + accrued"}
+          />
+          <Stat
+            label="Collateral held"
+            value={`${collateralAmountHuman.toLocaleString(undefined, {
+              maximumFractionDigits: 8,
+            })} ${collateralTok.symbol}`}
+            sub={
+              collateralUsdValue !== null
+                ? `$${collateralUsdValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                : undefined
+            }
+          />
+          <Stat
+            label="Current LTV"
+            value={
+              isClosed
+                ? "—"
+                : loan.currentLtvBps != null
+                  ? `${(loan.currentLtvBps / 100).toFixed(2)}%`
+                  : "—"
+            }
+            sub={isClosed ? "n/a — loan closed" : `liq @ ${(loan.liquidationLtvBps / 100).toFixed(2)}%`}
+          />
+          <Stat
+            label="Buffer"
+            value={buffer != null ? `${(buffer / 100).toFixed(2)} pp` : "—"}
+            sub={isClosed ? "n/a — loan closed" : undefined}
+          />
+          <Stat
+            label={isClosed ? "Interest paid" : "Accrued interest"}
+            value={
+              isClosed
+                ? loan.totalInterestPaidRaw
+                  ? `${formatAmount(loan.totalInterestPaidRaw, loanTok.decimals, 6)} ${loanTok.symbol}`
+                  : "—"
+                : `${formatAmount(loan.accruedInterestRaw, loanTok.decimals, 6)} ${loanTok.symbol}`
+            }
+            sub={
+              isClosed && loan.totalInterestPaidRaw && initialPrincipalHuman
+                ? `${(
+                    (toHumanNumber(loan.totalInterestPaidRaw, loanTok.decimals) /
+                      initialPrincipalHuman) *
+                    100
+                  ).toFixed(2)}% of principal`
+                : undefined
+            }
+          />
+          <Stat label="State" value={loan.state} />
+        </div>
       </section>
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -137,13 +260,32 @@ export default async function LoanDetailPage({
           <h2 className="text-sm font-medium mb-3">Schedule</h2>
           <dl className="space-y-2 text-sm">
             <Row label="Start" value={startDate?.toISOString().slice(0, 19) ?? "—"} />
-            <Row label="Duration" value={`${(Number(loan.duration) / 86400).toFixed(2)} days`} />
+            <Row label="Duration" value={`${termDays.toFixed(2)} days`} />
             <Row
               label="Maturity"
               value={maturityDate.toISOString().slice(0, 19)}
               tone={isOverdue ? "text-rose-300" : undefined}
             />
             <Row label="Grace period" value={`${(loan.gracePeriod / 86400).toFixed(2)} days`} />
+            {closedAt && (
+              <Row
+                label="Closed"
+                value={closedAt.toISOString().slice(0, 19)}
+              />
+            )}
+            {heldDisplay && (
+              <Row
+                label={isClosed ? "Held for" : "Open for"}
+                value={heldDisplay}
+                tone={
+                  closedHow === "early"
+                    ? "text-emerald-300"
+                    : closedHow === "overdue" || isOverdue
+                      ? "text-rose-300"
+                      : undefined
+                }
+              />
+            )}
           </dl>
         </div>
       </section>
@@ -170,7 +312,7 @@ export default async function LoanDetailPage({
               {[0, 5, 10, 15, 20, 30, 50].map((dropPct) => {
                 const newPrice = collateralPriceUsd * (1 - dropPct / 100);
                 const newCollateralUsd = collateralAmountHuman * newPrice;
-                const debtUsd = principalHuman; // assumes USDC ≈ $1
+                const debtUsd = outstandingDebtHuman; // assumes USDC ≈ $1
                 const newLtvBps = (debtUsd / newCollateralUsd) * 10000;
                 const liquidatable = newLtvBps >= loan.liquidationLtvBps;
                 return (
@@ -219,25 +361,47 @@ export default async function LoanDetailPage({
           </p>
         ) : (
           <ol className="space-y-2">
-            {events.map((e) => (
-              <li
-                key={`${e.txHash}-${e.logIndex}`}
-                className="flex items-baseline gap-3 text-sm border-l-2 border-white/10 pl-3"
-              >
-                <code className="text-xs text-[color:var(--muted)] w-32 shrink-0">
-                  blk {e.blockNumber.toString()}
-                </code>
-                <span className="font-medium">{e.eventName}</span>
-                <a
-                  href={basescanTxUrl(e.txHash)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-[color:var(--muted)] hover:underline font-mono ml-auto"
+            {events.map((e) => {
+              const collateralRaw = e.args?.collateralAmount as string | undefined;
+              const collateralLabel = collateralRaw
+                ? `${formatAmount(collateralRaw, collateralTok.decimals, 6)} ${collateralTok.symbol}`
+                : null;
+              const eventDate = new Date(Number(e.blockTimestamp) * 1000);
+              const sign = e.eventName === "LogCollateralAdded"
+                ? "+"
+                : e.eventName === "LogCollateralWithdrawn"
+                  ? "−"
+                  : null;
+              return (
+                <li
+                  key={`${e.txHash}-${e.logIndex}`}
+                  className="flex items-baseline gap-3 text-sm border-l-2 border-white/10 pl-3"
                 >
-                  {e.txHash.slice(0, 10)}…{e.txHash.slice(-6)} ↗
-                </a>
-              </li>
-            ))}
+                  <code className="text-xs text-[color:var(--muted)] w-44 shrink-0">
+                    {eventDate.toISOString().slice(0, 19)}
+                  </code>
+                  <span className="font-medium">{e.eventName}</span>
+                  {collateralLabel && sign && (
+                    <span
+                      className={`text-xs font-mono ${
+                        sign === "+" ? "text-emerald-300" : "text-amber-300"
+                      }`}
+                    >
+                      {sign}
+                      {collateralLabel}
+                    </span>
+                  )}
+                  <a
+                    href={basescanTxUrl(e.txHash)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-[color:var(--muted)] hover:underline font-mono ml-auto"
+                  >
+                    blk {e.blockNumber.toString()} ↗
+                  </a>
+                </li>
+              );
+            })}
           </ol>
         )}
       </section>
@@ -278,6 +442,37 @@ function Row({
       <dd className={`font-mono text-xs ${tone ?? ""}`}>{value}</dd>
     </div>
   );
+}
+
+function computeHeldSeconds(
+  loan: { matchedAtTimestamp: bigint | null; closedAtTimestamp: bigint | null },
+  isClosed: boolean,
+  nowUnix: number,
+): number | null {
+  if (!loan.matchedAtTimestamp) return null;
+  if (loan.closedAtTimestamp) {
+    return Number(loan.closedAtTimestamp - loan.matchedAtTimestamp);
+  }
+  // Active loans: hold-time is "now − matched". Closed loans missing a
+  // close event are unknown — return null rather than fabricate.
+  return isClosed ? null : Number(BigInt(nowUnix) - loan.matchedAtTimestamp);
+}
+
+function formatHeld(
+  heldDays: number | null,
+  termDays: number,
+  termPctUsed: number | null,
+  isClosed: boolean,
+): string | null {
+  if (heldDays === null) return null;
+  if (termPctUsed === null) return `${heldDays.toFixed(2)} days`;
+  // When the term is tiny relative to held time (test loans with 5-min
+  // terms held for months), the percentage gets noisy. Switch to an
+  // explicit "overdue by Nd" label.
+  if (isClosed && termPctUsed > 200) {
+    return `${heldDays.toFixed(1)} days (${(heldDays - termDays).toFixed(1)}d past maturity)`;
+  }
+  return `${heldDays.toFixed(2)} days (${termPctUsed.toFixed(0)}% of term)`;
 }
 
 function PartyRow({ label, address }: { label: string; address: string }) {

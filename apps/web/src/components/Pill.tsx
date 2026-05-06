@@ -10,6 +10,19 @@ export function HealthPill({ band }: { band: HealthBand }) {
   );
 }
 
+/**
+ * Single-pill status indicator. For active loans → shows the health
+ * band (Healthy/Warning/At risk/Liquidatable). For closed loans → shows
+ * the lifecycle outcome (Repaid/Liquidated/Expired). Avoids the
+ * State+Health redundancy where every closed loan said "repaid · Closed".
+ */
+export function StatusPill({ state, band }: { state: string; band: HealthBand }) {
+  if (state === "active" || state === "pending") {
+    return <HealthPill band={band} />;
+  }
+  return <StatePill state={state} />;
+}
+
 export function StatePill({ state }: { state: string }) {
   const stateClasses: Record<string, string> = {
     active: "bg-blue-500/15 text-blue-300 ring-1 ring-blue-500/30",

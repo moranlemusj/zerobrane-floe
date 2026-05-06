@@ -8,9 +8,20 @@ import { createDb, type Loan, loans, markets, oracles } from "@floe-dashboard/da
 
 export type LoanRow = Loan;
 
+export type StatusFilter =
+  | "healthy"
+  | "warning"
+  | "at_risk"
+  | "liquidatable"
+  | "repaid"
+  | "liquidated"
+  | "expired"
+  | "pending";
+
 export interface LoanFilter {
   marketId?: string;
-  state?: string;
+  /** Display-band filter (mirrors the Status pill — health for active loans, lifecycle for closed). */
+  status?: StatusFilter;
   borrower?: string;
   collateralToken?: string;
   minLtvBps?: number;
@@ -19,7 +30,18 @@ export interface LoanFilter {
 
 export interface LoanQueryOptions {
   filter?: LoanFilter;
-  sort?: "currentLtv" | "principal" | "startTime" | "loanId";
+  sort?:
+    | "currentLtv"
+    | "principal"
+    | "startTime"
+    | "loanId"
+    | "matchedAt"
+    | "closedAt"
+    | "heldDuration"
+    | "interestPaid"
+    | "interestRate"
+    | "initialLtv"
+    | "status";
   direction?: "asc" | "desc";
   limit?: number;
   offset?: number;
@@ -32,7 +54,8 @@ export function getDb() {
 function buildLoanWhere(filter: LoanFilter | undefined): SQL | undefined {
   const conditions: SQL[] = [];
   if (filter?.marketId) conditions.push(eq(loans.marketId, filter.marketId));
-  if (filter?.state) conditions.push(eq(loans.state, filter.state as LoanRow["state"]));
+  const statusCond = buildStatusCondition(filter?.status);
+  if (statusCond) conditions.push(statusCond);
   if (filter?.borrower)
     conditions.push(ilike(loans.borrower, `%${filter.borrower.toLowerCase()}%`));
   if (filter?.collateralToken)
@@ -46,6 +69,49 @@ function buildLoanWhere(filter: LoanFilter | undefined): SQL | undefined {
   return and(...conditions);
 }
 
+/**
+ * Map a display-band filter (matches the StatusPill labels) to its SQL
+ * predicate. Active-state bands derive from current LTV vs liquidation
+ * LTV (matching healthBand() in lib/format.ts); closed-state values
+ * just compare the lifecycle column.
+ */
+function buildStatusCondition(status: StatusFilter | undefined): SQL | undefined {
+  if (!status) return undefined;
+  switch (status) {
+    case "repaid":
+    case "liquidated":
+    case "expired":
+    case "pending":
+      return eq(loans.state, status);
+    case "liquidatable":
+      // Active loan whose buffer is gone (or chain says underwater).
+      return sql`${loans.state} = 'active' AND (
+        ${loans.isUnderwater} = true
+        OR (${loans.currentLtvBps} IS NOT NULL AND ${loans.liquidationLtvBps} - ${loans.currentLtvBps} < 0)
+      )`;
+    case "at_risk":
+      return sql`${loans.state} = 'active' AND ${loans.isUnderwater} IS NOT TRUE
+        AND ${loans.currentLtvBps} IS NOT NULL
+        AND ${loans.liquidationLtvBps} - ${loans.currentLtvBps} >= 0
+        AND ${loans.liquidationLtvBps} - ${loans.currentLtvBps} < 500`;
+    case "warning":
+      // Either buffer in the warning band, or LTV unknown (we render warning
+      // for unknown LTV in healthBand() — keep the SQL aligned).
+      return sql`${loans.state} = 'active' AND ${loans.isUnderwater} IS NOT TRUE
+        AND (
+          ${loans.currentLtvBps} IS NULL
+          OR (
+            ${loans.liquidationLtvBps} - ${loans.currentLtvBps} >= 500
+            AND ${loans.liquidationLtvBps} - ${loans.currentLtvBps} < 2000
+          )
+        )`;
+    case "healthy":
+      return sql`${loans.state} = 'active' AND ${loans.isUnderwater} IS NOT TRUE
+        AND ${loans.currentLtvBps} IS NOT NULL
+        AND ${loans.liquidationLtvBps} - ${loans.currentLtvBps} >= 2000`;
+  }
+}
+
 export async function listLoans(opts: LoanQueryOptions = {}): Promise<{
   rows: LoanRow[];
   total: number;
@@ -56,20 +122,71 @@ export async function listLoans(opts: LoanQueryOptions = {}): Promise<{
   const sortCol = (() => {
     switch (opts.sort) {
       case "principal":
-        return loans.principalRaw;
+        // Sort by initial principal — that's what the "Borrowed" column shows
+        // and is meaningful across active+repaid loans (repaid loans have
+        // current principal=0 on chain).
+        return sql`COALESCE(${loans.initialPrincipalRaw}, ${loans.principalRaw})`;
       case "startTime":
         return loans.startTime;
       case "loanId":
         return sql`CAST(${loans.loanId} AS BIGINT)`;
+      case "matchedAt":
+        return loans.matchedAtTimestamp;
+      case "closedAt":
+        return loans.closedAtTimestamp;
+      case "heldDuration":
+        // Closed loans WITHOUT a close timestamp are honestly unknown;
+        // collapse to NULL so they sink under NULLS LAST instead of
+        // being treated as "held since match until now" (which the UI
+        // correctly renders as "—" but the sort would otherwise rank
+        // at the top).
+        return sql`CASE
+          WHEN ${loans.matchedAtTimestamp} IS NULL THEN NULL
+          WHEN ${loans.closedAtTimestamp} IS NOT NULL
+            THEN ${loans.closedAtTimestamp} - ${loans.matchedAtTimestamp}
+          WHEN ${loans.state} = 'active'
+            THEN EXTRACT(EPOCH FROM NOW())::bigint - ${loans.matchedAtTimestamp}
+          ELSE NULL
+        END`;
+      case "interestPaid":
+        return loans.totalInterestPaidRaw;
+      case "interestRate":
+        return loans.interestRateBps;
+      case "initialLtv":
+        return loans.ltvBps;
+      case "status":
+        // Severity rank — worst first when sorted ASC (1 = liquidatable,
+        // 8 = repaid). Mirrors the buckets in buildStatusCondition() and
+        // the displayed Status pill.
+        return sql`CASE
+          WHEN ${loans.state} = 'active' AND (
+            ${loans.isUnderwater} = true
+            OR (${loans.currentLtvBps} IS NOT NULL AND ${loans.liquidationLtvBps} - ${loans.currentLtvBps} < 0)
+          ) THEN 1
+          WHEN ${loans.state} = 'active' AND ${loans.currentLtvBps} IS NOT NULL
+            AND ${loans.liquidationLtvBps} - ${loans.currentLtvBps} >= 0
+            AND ${loans.liquidationLtvBps} - ${loans.currentLtvBps} < 500 THEN 2
+          WHEN ${loans.state} = 'active' AND (
+            ${loans.currentLtvBps} IS NULL
+            OR ${loans.liquidationLtvBps} - ${loans.currentLtvBps} < 2000
+          ) THEN 3
+          WHEN ${loans.state} = 'active' THEN 4
+          WHEN ${loans.state} = 'pending' THEN 5
+          WHEN ${loans.state} = 'liquidated' THEN 6
+          WHEN ${loans.state} = 'expired' THEN 7
+          WHEN ${loans.state} = 'repaid' THEN 8
+          ELSE 9
+        END`;
       default:
         return loans.currentLtvBps;
     }
   })();
-  const dir = opts.direction === "asc" ? asc : desc;
-  const orderBy =
-    opts.sort === "currentLtv" || !opts.sort
-      ? sql`${sortCol} ${opts.direction === "asc" ? sql`ASC NULLS LAST` : sql`DESC NULLS LAST`}`
-      : dir(sortCol);
+  // NULLs LAST for everything: a closed loan with no close timestamp,
+  // or an active loan with no interest paid, should sink rather than
+  // dominate the head of the list.
+  const orderBy = sql`${sortCol} ${
+    opts.direction === "asc" ? sql`ASC NULLS LAST` : sql`DESC NULLS LAST`
+  }`;
 
   const baseQuery = db
     .select()

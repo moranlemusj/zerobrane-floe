@@ -95,6 +95,32 @@ export const loans = pgTable(
     operator: text("operator"), // 0x0 if not facilitator-operated
     isUnderwater: boolean("is_underwater"), // hydrated from lendingViews
 
+    // Initial conditions (immutable after first observation; populated
+    // by reading the loanToken/collateralToken Transfer events from the
+    // match transaction's receipt).
+    initialPrincipalRaw: numeric("initial_principal_raw", { precision: 78, scale: 0 }),
+    initialCollateralAmountRaw: numeric("initial_collateral_amount_raw", {
+      precision: 78,
+      scale: 0,
+    }),
+    matchedAtBlock: bigint("matched_at_block", { mode: "bigint" }),
+    matchedAtTimestamp: bigint("matched_at_timestamp", { mode: "bigint" }),
+    matchedAtTx: text("matched_at_tx"),
+
+    // Close (last lifecycle event for closed loans).
+    closedAtBlock: bigint("closed_at_block", { mode: "bigint" }),
+    closedAtTimestamp: bigint("closed_at_timestamp", { mode: "bigint" }),
+    closedAtTx: text("closed_at_tx"),
+
+    // Total loan-token interest paid by the borrower at close
+    // (= repayment amount − initial principal). Backfilled from the
+    // close-tx Transfer event. NULL while loan is open or close-tx
+    // wasn't captured.
+    totalInterestPaidRaw: numeric("total_interest_paid_raw", {
+      precision: 78,
+      scale: 0,
+    }),
+
     // Indexer bookkeeping
     createdAtBlock: bigint("created_at_block", { mode: "bigint" }).notNull(),
     lastEventBlock: bigint("last_event_block", { mode: "bigint" }).notNull(),

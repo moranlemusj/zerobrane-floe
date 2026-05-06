@@ -13,6 +13,17 @@ export function tokenInfo(addr: string): { symbol: string; decimals: number } {
   return TOKEN_SYMBOLS[addr.toLowerCase()] ?? { symbol: "?", decimals: 18 };
 }
 
+/**
+ * Convert a raw uint256 amount to a JS number scaled by decimals. Loses
+ * precision for amounts > Number.MAX_SAFE_INTEGER — use `formatAmount`
+ * for display and reserve this for arithmetic (e.g., the stress
+ * simulator) where 53-bit precision is acceptable.
+ */
+export function toHumanNumber(rawAmount: string | bigint | null, decimals: number): number {
+  if (rawAmount === null) return 0;
+  return Number(rawAmount) / 10 ** decimals;
+}
+
 /** Format a raw uint256 amount string against a token's decimals. */
 export function formatAmount(rawAmount: string | null, decimals: number, displayDecimals = 4): string {
   if (rawAmount === null) return "—";

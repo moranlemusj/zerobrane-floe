@@ -19,7 +19,7 @@ export default async function Home({
   const dir = (params.dir as LoanQueryOptions["direction"]) ?? "desc";
 
   const filter: LoanQueryOptions["filter"] = {};
-  if (params.state) filter.state = params.state as never;
+  if (params.status) filter.status = params.status as never;
   if (params.collateral) filter.collateralToken = params.collateral;
 
   const [{ rows, total }, kpis] = await Promise.all([
