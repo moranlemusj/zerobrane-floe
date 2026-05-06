@@ -26,6 +26,7 @@ import { getResolvedAbis } from "./abis";
 import { backfillEvents } from "./backfill";
 import { discoverLoanIds } from "./bootstrap-loans";
 import { buildClientsWithFallback } from "./clients";
+import { enrichUnknownMarkets } from "./enrich-markets";
 import { hydrateLoans } from "./hydrate";
 import { syncMarkets } from "./markets";
 import { initialOracleSync } from "./oracle";
@@ -125,6 +126,11 @@ async function main() {
 
   await initialOracleSync(clients, head);
   log.info({}, "oracle snapshot done");
+
+  // Backfill any market metadata for markets referenced by loans but
+  // missing from our markets table (chain has more than /v1/markets exposes).
+  const enrichResult = await enrichUnknownMarkets(clients, abis.matcherViews);
+  log.info(enrichResult, "market enrichment done");
 
   await setLastBlock(clients.db, head);
 
