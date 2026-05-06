@@ -1,0 +1,577 @@
+{
+  "id": "1ef47876-4005-4fd0-8940-61da7cda5073",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.events": {
+      "name": "events",
+      "schema": "",
+      "columns": {
+        "tx_hash": {
+          "name": "tx_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "log_index": {
+          "name": "log_index",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "block_number": {
+          "name": "block_number",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "block_timestamp": {
+          "name": "block_timestamp",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "contract_address": {
+          "name": "contract_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_name": {
+          "name": "event_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "loan_id": {
+          "name": "loan_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "args": {
+          "name": "args",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "events_by_loan_idx": {
+          "name": "events_by_loan_idx",
+          "columns": [
+            {
+              "expression": "loan_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "events_by_block_idx": {
+          "name": "events_by_block_idx",
+          "columns": [
+            {
+              "expression": "block_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "events_by_event_idx": {
+          "name": "events_by_event_idx",
+          "columns": [
+            {
+              "expression": "event_name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "events_tx_hash_log_index_pk": {
+          "name": "events_tx_hash_log_index_pk",
+          "columns": [
+            "tx_hash",
+            "log_index"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.indexer_state": {
+      "name": "indexer_state",
+      "schema": "",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "value": {
+          "name": "value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.loans": {
+      "name": "loans",
+      "schema": "",
+      "columns": {
+        "loan_id": {
+          "name": "loan_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "market_id": {
+          "name": "market_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "borrower": {
+          "name": "borrower",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "lender": {
+          "name": "lender",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "loan_token": {
+          "name": "loan_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "collateral_token": {
+          "name": "collateral_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "principal_raw": {
+          "name": "principal_raw",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "collateral_amount_raw": {
+          "name": "collateral_amount_raw",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "accrued_interest_raw": {
+          "name": "accrued_interest_raw",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "interest_rate_bps": {
+          "name": "interest_rate_bps",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ltv_bps": {
+          "name": "ltv_bps",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "liquidation_ltv_bps": {
+          "name": "liquidation_ltv_bps",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "current_ltv_bps": {
+          "name": "current_ltv_bps",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "market_fee_bps": {
+          "name": "market_fee_bps",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "matcher_commission_bps": {
+          "name": "matcher_commission_bps",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "min_interest_bps": {
+          "name": "min_interest_bps",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "grace_period": {
+          "name": "grace_period",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "start_time": {
+          "name": "start_time",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "duration": {
+          "name": "duration",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "loan_state",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operator": {
+          "name": "operator",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_underwater": {
+          "name": "is_underwater",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at_block": {
+          "name": "created_at_block",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_event_block": {
+          "name": "last_event_block",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_hydrated_at": {
+          "name": "last_hydrated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "loans_by_market_idx": {
+          "name": "loans_by_market_idx",
+          "columns": [
+            {
+              "expression": "market_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "loans_by_borrower_idx": {
+          "name": "loans_by_borrower_idx",
+          "columns": [
+            {
+              "expression": "borrower",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "loans_by_lender_idx": {
+          "name": "loans_by_lender_idx",
+          "columns": [
+            {
+              "expression": "lender",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "loans_by_state_idx": {
+          "name": "loans_by_state_idx",
+          "columns": [
+            {
+              "expression": "state",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "loans_by_collateral_idx": {
+          "name": "loans_by_collateral_idx",
+          "columns": [
+            {
+              "expression": "collateral_token",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "loans_market_id_markets_market_id_fk": {
+          "name": "loans_market_id_markets_market_id_fk",
+          "tableFrom": "loans",
+          "tableTo": "markets",
+          "columnsFrom": [
+            "market_id"
+          ],
+          "columnsTo": [
+            "market_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.markets": {
+      "name": "markets",
+      "schema": "",
+      "columns": {
+        "market_id": {
+          "name": "market_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "loan_token_address": {
+          "name": "loan_token_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "loan_token_symbol": {
+          "name": "loan_token_symbol",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "loan_token_decimals": {
+          "name": "loan_token_decimals",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "collateral_token_address": {
+          "name": "collateral_token_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "collateral_token_symbol": {
+          "name": "collateral_token_symbol",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "collateral_token_decimals": {
+          "name": "collateral_token_decimals",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_synced_at": {
+          "name": "last_synced_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.oracles": {
+      "name": "oracles",
+      "schema": "",
+      "columns": {
+        "feed_address": {
+          "name": "feed_address",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "decimals": {
+          "name": "decimals",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "latest_round_id": {
+          "name": "latest_round_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "latest_answer": {
+          "name": "latest_answer",
+          "type": "numeric(78, 0)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "observed_at_block": {
+          "name": "observed_at_block",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.loan_state": {
+      "name": "loan_state",
+      "schema": "public",
+      "values": [
+        "pending",
+        "active",
+        "repaid",
+        "liquidated",
+        "expired"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
