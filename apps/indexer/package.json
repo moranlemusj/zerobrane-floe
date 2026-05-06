@@ -1,0 +1,29 @@
+{
+  "name": "@floe-dashboard/indexer",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Floe dashboard indexer — viem WebSocket subscriptions on the matcher contract + Chainlink oracles, persisted to Neon Postgres via @floe-dashboard/data.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/main.ts",
+  "scripts": {
+    "dev": "tsx --env-file=../../.env src/main.ts",
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@floe-agents/core": "workspace:*",
+    "@floe-dashboard/data": "workspace:*",
+    "drizzle-orm": "^0.36.4",
+    "pino": "^9.5.0",
+    "viem": "^2.41.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}
