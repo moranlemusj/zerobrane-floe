@@ -22,8 +22,9 @@ describe("buildAuthHeaders", () => {
     expect(headers["X-Signature"]).toBe("0xdeadbeef");
     expect(headers["X-Timestamp"]).toMatch(/^\d+$/);
     expect(signer).toHaveBeenCalledOnce();
+    // Signer receives the canonical Floe message string.
     expect(signer).toHaveBeenCalledWith(
-      expect.objectContaining({ address: "0xabc", timestamp: expect.any(Number) }),
+      expect.stringMatching(/^Floe Credit API\nTimestamp: \d+$/),
     );
   });
 
@@ -35,6 +36,11 @@ describe("buildAuthHeaders", () => {
     );
     expect(headers["X-Signature"]).toBe("0xfeed");
     expect(headers.Authorization).toBeUndefined();
+  });
+
+  it("floeAuthMessage produces the verbatim format Floe expects", async () => {
+    const { floeAuthMessage } = await import("../auth.js");
+    expect(floeAuthMessage(1711814400)).toBe("Floe Credit API\nTimestamp: 1711814400");
   });
 
   it("wallet mode falls back to api key when no signer present", async () => {
