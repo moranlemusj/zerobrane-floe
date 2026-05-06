@@ -5,12 +5,14 @@
  * Subscriptions, backfill, hydration land in subsequent commits.
  */
 
-import pino from "pino";
 import { sql } from "drizzle-orm";
-import { buildClients } from "./clients";
+import pino from "pino";
 import { getResolvedAbis } from "./abis";
-import { getLastBlock, setLastBlock } from "./state";
+import { discoverLoanIds } from "./bootstrap-loans";
+import { buildClients } from "./clients";
+import { hydrateLoans } from "./hydrate";
 import { syncMarkets } from "./markets";
+import { getLastBlock, setLastBlock } from "./state";
 
 const log = pino({ level: process.env.LOG_LEVEL ?? "info" }).child({ service: "indexer" });
 
@@ -45,8 +47,6 @@ async function main() {
   const head = await clients.httpClient.getBlockNumber();
   const lastBlock = await getLastBlock(clients.db);
   if (lastBlock === 0n) {
-    // First run — set lastBlock to head minus a small lookback so we
-    // backfill recent activity rather than the whole chain.
     const lookback = 100_000n; // ~55 hours on Base
     const start = head > lookback ? head - lookback : 0n;
     await setLastBlock(clients.db, start);
@@ -55,7 +55,25 @@ async function main() {
     log.info({ head, lastBlock, gap: head - lastBlock }, "resuming from persisted lastBlock");
   }
 
-  log.info({ phase: "exit" }, "Phase 3 step 1 OK — ready for backfill + subscriptions");
+  // Bootstrap: discover loans by enumerating getLoan(1..N). One-shot —
+  // catches loans created before our event-backfill window starts.
+  log.info({}, "discovering existing loans via getLoan() probe…");
+  const { found, highestProbed } = await discoverLoanIds(clients, abis.matcherViews);
+  log.info({ found: found.length, highestProbed: highestProbed.toString() }, "loan discovery done");
+
+  if (found.length > 0) {
+    log.info({}, "hydrating discovered loans via Multicall3…");
+    const hydrateResult = await hydrateLoans(
+      clients,
+      abis.matcherViews,
+      abis.lendingViewsAbi,
+      found,
+      head,
+    );
+    log.info(hydrateResult, "hydration done");
+  }
+
+  log.info({ phase: "exit" }, "Phase 3 step 2 OK — bootstrap complete");
 }
 
 main().catch((err) => {

@@ -23,7 +23,11 @@ export interface IndexerClients {
   hasWebSocket: boolean;
 }
 
-export const DEFAULT_BASE_RPC = "https://mainnet.base.org";
+/** Default fallback RPC. The official `mainnet.base.org` rate-limits to
+ *  ~5 req/burst — unusable for indexing. llamarpc is friendlier for
+ *  read-heavy workloads. For production, configure your own
+ *  `BASE_RPC_URL` (Alchemy / QuickNode / your own Base node). */
+export const DEFAULT_BASE_RPC = "https://base.llamarpc.com";
 
 export function buildClients(): IndexerClients {
   const wssUrl = process.env.BASE_WSS_URL?.trim();

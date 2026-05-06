@@ -57,9 +57,10 @@ export const loans = pgTable(
   "loans",
   {
     loanId: text("loan_id").primaryKey(),
-    marketId: text("market_id")
-      .notNull()
-      .references(() => markets.marketId),
+    // NOTE: not FK to markets — chain has more markets than /v1/markets
+    // exposes, and we want to display loans even when their market hasn't
+    // been backfilled into the markets table yet.
+    marketId: text("market_id").notNull(),
     borrower: text("borrower").notNull(),
     lender: text("lender").notNull(),
     loanToken: text("loan_token").notNull(),

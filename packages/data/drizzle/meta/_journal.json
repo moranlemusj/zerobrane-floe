@@ -8,6 +8,13 @@
       "when": 1778093169229,
       "tag": "0000_chief_shape",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778095252631,
+      "tag": "0001_lumpy_rafael_vega",
+      "breakpoints": true
     }
   ]
 }
