@@ -1,0 +1,30 @@
+{
+  "name": "@floe-dashboard/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Floe dashboard web app — Next.js 16 + Tailwind 4. Reads from the Neon DB (populated by @floe-dashboard/indexer) and from Floe's public REST endpoints.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@floe-agents/core": "workspace:*",
+    "@floe-dashboard/data": "workspace:*",
+    "drizzle-orm": "^0.36.4",
+    "next": "^16.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.6.3"
+  }
+}
