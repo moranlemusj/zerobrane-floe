@@ -291,6 +291,67 @@ export async function loansByMarket(): Promise<
   }>;
 }
 
+export interface EventRow {
+  txHash: string;
+  logIndex: number;
+  blockNumber: bigint;
+  blockTimestamp: bigint;
+  contractAddress: string;
+  eventName: string;
+  loanId: string | null;
+  args: Record<string, unknown>;
+}
+
+/**
+ * Paginated event stream for /activity. Ordered by (block, log_index)
+ * descending so newest is first. Optional eventName filter for the
+ * dropdown.
+ */
+export async function listEvents(opts: {
+  eventName?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ rows: EventRow[]; total: number }> {
+  const db = getDb();
+  const limit = opts.limit ?? 50;
+  const offset = opts.offset ?? 0;
+  const where = opts.eventName ? sql`WHERE event_name = ${opts.eventName}` : sql``;
+  const rowsRes = await db.execute(sql`
+    SELECT tx_hash, log_index, block_number, block_timestamp,
+           contract_address, event_name, loan_id, args
+    FROM events
+    ${where}
+    ORDER BY block_number DESC, log_index DESC
+    LIMIT ${limit} OFFSET ${offset}
+  `);
+  const totalRes = await db.execute(sql`SELECT COUNT(*)::int AS n FROM events ${where}`);
+  return {
+    rows: rowsRes.rows.map((r) => {
+      const row = r as Record<string, unknown>;
+      return {
+        txHash: String(row.tx_hash),
+        logIndex: Number(row.log_index),
+        blockNumber: BigInt(String(row.block_number)),
+        blockTimestamp: BigInt(String(row.block_timestamp)),
+        contractAddress: String(row.contract_address),
+        eventName: String(row.event_name),
+        loanId: row.loan_id ? String(row.loan_id) : null,
+        args: (row.args ?? {}) as Record<string, unknown>,
+      };
+    }),
+    total: Number((totalRes.rows[0] as { n: number } | undefined)?.n ?? 0),
+  };
+}
+
+/** Distinct event names in the events table — for the activity-page filter dropdown. */
+export async function listEventNames(): Promise<string[]> {
+  const db = getDb();
+  const r = await db.execute(
+    sql`SELECT DISTINCT event_name FROM events ORDER BY event_name`,
+  );
+  return r.rows.map((row) => String((row as { event_name: string }).event_name));
+}
+
 export interface AddressStats {
   asBorrower: number;
   asLender: number;

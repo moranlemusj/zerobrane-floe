@@ -11,6 +11,7 @@ export function SiteHeader({ address }: { address?: string }) {
         <nav className="flex items-center gap-1 sm:gap-3 text-sm overflow-x-auto -mx-1 px-1 sm:mx-0 sm:px-0">
           <NavLink href="/">Loans</NavLink>
           <NavLink href="/markets">Markets</NavLink>
+          <NavLink href="/activity">Activity</NavLink>
           <NavLink href="/me">My loans</NavLink>
           <NavLink href="/chat">Chat</NavLink>
         </nav>
