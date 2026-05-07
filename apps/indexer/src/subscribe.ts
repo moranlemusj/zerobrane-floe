@@ -12,6 +12,7 @@ import {
   activeLoanIdsForCollaterals,
   collateralsForOracle,
   readOracle,
+  resolveUnderlyingAggregator,
   snapshotOracle,
 } from "./oracle";
 import { applyEvent } from "./events";
@@ -26,13 +27,13 @@ export interface SubscriptionHandles {
   unwatchOracles: Array<() => void>;
 }
 
-export function subscribeAll(opts: {
+export async function subscribeAll(opts: {
   clients: IndexerClients;
   decoderAbi: AbiEvent[];
   matcherViewsAbi: Abi;
   lendingViewsAbi: Abi;
   log: pino.Logger;
-}): SubscriptionHandles {
+}): Promise<SubscriptionHandles> {
   const { clients, decoderAbi, matcherViewsAbi, lendingViewsAbi, log } = opts;
   const subClient = preferWss(clients);
 
@@ -71,8 +72,25 @@ export function subscribeAll(opts: {
 
   const unwatchOracles: Array<() => void> = [];
   for (const [name, feedAddress] of Object.entries(ORACLES)) {
+    // The proxy doesn't emit events — the underlying aggregator does.
+    // Resolve once at subscribe-time. View reads stay against the proxy.
+    let underlying: `0x${string}`;
+    try {
+      underlying = await resolveUnderlyingAggregator(clients, feedAddress);
+    } catch (err) {
+      log.error(
+        { err: (err as Error).message, feed: name, proxy: feedAddress },
+        `failed to resolve underlying aggregator for ${name} — skipping subscription`,
+      );
+      continue;
+    }
+    log.info(
+      { feed: name, proxy: feedAddress, underlying },
+      `oracle ${name}: subscribing to underlying ${underlying} (proxy ${feedAddress})`,
+    );
+
     const unwatch = subClient.watchContractEvent({
-      address: feedAddress,
+      address: underlying,
       abi: CHAINLINK_AGGREGATOR_ABI,
       eventName: "AnswerUpdated",
       onError: (err: Error) =>
@@ -83,10 +101,13 @@ export function subscribeAll(opts: {
       onLogs: async (logs: Log[]) => {
         const lastBlock = logs.at(-1)?.blockNumber ?? 0n;
         log.info(
-          { feed: name, address: feedAddress, count: logs.length, lastBlock: lastBlock.toString() },
+          { feed: name, underlying, count: logs.length, lastBlock: lastBlock.toString() },
           "oracle tick",
         );
         try {
+          // Read via the proxy — that's the canonical read path; it forwards
+          // to whatever the current underlying is, so we stay correct across
+          // hypothetical phase changes between subscribe-time and read-time.
           const snapshot = await readOracle(clients, feedAddress);
           await snapshotOracle(clients.db, snapshot, lastBlock);
         } catch (err) {

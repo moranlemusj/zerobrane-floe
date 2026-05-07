@@ -11,10 +11,39 @@
  */
 
 import { eq, sql } from "drizzle-orm";
+import { getAddress, parseAbi } from "viem";
 import type { IndexerClients } from "./clients";
 import { CHAINLINK_AGGREGATOR_ABI } from "./abis";
 import { ORACLES, COLLATERAL_TO_ORACLE } from "./contracts";
 import { oracles, loans, type Db } from "@floe-dashboard/data";
+
+const PROXY_ABI = parseAbi([
+  "function aggregator() view returns (address)",
+]);
+
+/**
+ * Chainlink AggregatorProxy delegates view reads to the current
+ * underlying aggregator, but `AnswerUpdated` events fire on the
+ * underlying — NOT the proxy. Subscribing to the proxy is silent
+ * forever. This resolves the proxy → underlying once at boot so we
+ * can subscribe at the correct address.
+ *
+ * If Chainlink swaps the underlying (a "phase change"), our subscriber
+ * goes silent until the next indexer restart — at which point we'll
+ * re-resolve and pick up the new one. Phase changes are rare (years
+ * apart) so a manual restart on the warning is fine.
+ */
+export async function resolveUnderlyingAggregator(
+  clients: IndexerClients,
+  proxyAddress: `0x${string}`,
+): Promise<`0x${string}`> {
+  const underlying = (await clients.httpClient.readContract({
+    address: proxyAddress,
+    abi: PROXY_ABI,
+    functionName: "aggregator",
+  })) as `0x${string}`;
+  return getAddress(underlying);
+}
 
 export interface OracleSnapshot {
   feedAddress: `0x${string}`;

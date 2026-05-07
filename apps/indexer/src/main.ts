@@ -152,7 +152,7 @@ async function main() {
     return;
   }
 
-  const handles: SubscriptionHandles = subscribeAll({
+  const handles: SubscriptionHandles = await subscribeAll({
     clients,
     decoderAbi: abis.matcherDecodeAbi,
     matcherViewsAbi: abis.matcherViews,
