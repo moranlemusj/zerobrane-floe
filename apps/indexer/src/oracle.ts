@@ -10,7 +10,7 @@
  * LTV-affecting price tick happens.
  */
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { getAddress, parseAbi } from "viem";
 import type { IndexerClients } from "./clients";
 import { CHAINLINK_AGGREGATOR_ABI } from "./abis";
@@ -173,9 +173,12 @@ export async function activeLoanIdsForCollaterals(
 ): Promise<bigint[]> {
   if (collateralTokens.length === 0) return [];
   const lowered = collateralTokens.map((a) => a.toLowerCase());
+  // Drizzle's inArray emits IN (...) — Neon's HTTP driver doesn't auto-coerce
+  // a JS array into a PG array literal for `= ANY($1)`, which is why the
+  // earlier sql`= ANY(${lowered})` crashed with "malformed array literal".
   const rows = await db
     .select({ loanId: loans.loanId })
     .from(loans)
-    .where(sql`${loans.collateralToken} = ANY(${lowered}) AND ${loans.state} = 'active'`);
+    .where(and(inArray(loans.collateralToken, lowered), eq(loans.state, "active")));
   return rows.map((r) => BigInt(r.loanId));
 }
