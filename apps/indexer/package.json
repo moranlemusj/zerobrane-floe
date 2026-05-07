@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "tsx --env-file=../../.env src/main.ts",
     "build": "tsc",
-    "start": "node dist/main.js",
+    "start": "tsx src/main.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -18,11 +18,11 @@
     "@floe-dashboard/data": "workspace:*",
     "drizzle-orm": "^0.36.4",
     "pino": "^9.5.0",
+    "tsx": "^4.19.2",
     "viem": "^2.41.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
-    "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8"
   }
