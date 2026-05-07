@@ -92,54 +92,52 @@ export default async function LoanDetailPage({
 
   return (
     <main className="space-y-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <Link href="/" className="text-xs text-[color:var(--muted)] hover:underline">
-            ← All loans
-          </Link>
-          <h1 className="text-2xl font-semibold tracking-tight mt-1">
-            Loan #{loan.loanId}{" "}
-            <span className="text-[color:var(--muted)] font-normal text-base">
-              · {loanTok.symbol} / {collateralTok.symbol}
+      <div>
+        <Link href="/" className="text-xs text-[color:var(--muted)] hover:underline">
+          ← All loans
+        </Link>
+        <h1 className="text-2xl font-semibold tracking-tight mt-1">
+          Loan #{loan.loanId}{" "}
+          <span className="text-[color:var(--muted)] font-normal text-base">
+            · {loanTok.symbol} / {collateralTok.symbol}
+          </span>
+        </h1>
+        <div className="flex flex-wrap items-center gap-2 mt-2">
+          <StatePill state={loan.state} />
+          <HealthPill band={band} />
+          {isOverdue && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/30">
+              Overdue
             </span>
-          </h1>
-          <div className="flex items-center gap-2 mt-2">
-            <StatePill state={loan.state} />
-            <HealthPill band={band} />
-            {isOverdue && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/30">
-                Overdue
-              </span>
-            )}
-            {closedHow && (
-              <span
-                className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                  closedHow === "early"
-                    ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30"
-                    : closedHow === "overdue"
-                      ? "bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/30"
-                      : "bg-zinc-500/15 text-zinc-300 ring-1 ring-zinc-500/30"
-                }`}
+          )}
+          {closedHow && (
+            <span
+              className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                closedHow === "early"
+                  ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30"
+                  : closedHow === "overdue"
+                    ? "bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/30"
+                    : "bg-zinc-500/15 text-zinc-300 ring-1 ring-zinc-500/30"
+              }`}
+            >
+              Closed {closedHow.replace("_", " ")}
+            </span>
+          )}
+          {loan.operator && (
+            <span className="text-[11px] text-[color:var(--muted)]">
+              Facilitator-operated ·{" "}
+              <a
+                href={basescanAddressUrl(loan.operator)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono hover:underline"
               >
-                Closed {closedHow.replace("_", " ")}
-              </span>
-            )}
-            {loan.operator && (
-              <span className="text-[11px] text-[color:var(--muted)]">
-                Facilitator-operated ·{" "}
-                <a
-                  href={basescanAddressUrl(loan.operator)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-mono hover:underline"
-                >
-                  {shortAddress(loan.operator)}
-                </a>
-              </span>
-            )}
-          </div>
+                {shortAddress(loan.operator)}
+              </a>
+            </span>
+          )}
         </div>
-      </header>
+      </div>
 
       <section className="space-y-2">
         <h2 className="text-[11px] uppercase tracking-wide text-[color:var(--muted)]">

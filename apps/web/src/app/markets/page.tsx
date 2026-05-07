@@ -35,22 +35,12 @@ export default async function MarketsPage() {
 
   return (
     <main className="space-y-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Markets</h1>
-          <p className="text-sm text-[color:var(--muted)] mt-1">
-            Lending pairs deployed on Floe's matcher contract on Base.
-          </p>
-        </div>
-        <nav className="flex items-center gap-3 text-sm">
-          <Link href="/" className="px-2 py-1 hover:underline">
-            Loans
-          </Link>
-          <Link href="/markets" className="px-2 py-1 hover:underline">
-            Markets
-          </Link>
-        </nav>
-      </header>
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Markets</h1>
+        <p className="text-sm text-[color:var(--muted)] mt-1">
+          Lending pairs deployed on Floe's matcher contract on Base.
+        </p>
+      </div>
 
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {merged.map((row) => {

@@ -1,5 +1,3 @@
-import Link from "next/link";
-import { ConnectButton } from "@/components/ConnectButton";
 import { LoanTable } from "@/components/LoanTable";
 import { listLoans } from "@/lib/queries";
 import { getSession } from "@/lib/session";
@@ -12,20 +10,14 @@ export default async function MePage() {
 
   return (
     <main className="space-y-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <Link href="/" className="text-xs text-[color:var(--muted)] hover:underline">
-            ← Dashboard
-          </Link>
-          <h1 className="text-2xl font-semibold tracking-tight mt-1">Your loans</h1>
-          <p className="text-sm text-[color:var(--muted)] mt-1">
-            {address
-              ? `Showing loans where the borrower is ${address}.`
-              : "Connect your wallet and sign a message to view loans you originated."}
-          </p>
-        </div>
-        <ConnectButton initialAddress={address ?? undefined} />
-      </header>
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Your loans</h1>
+        <p className="text-sm text-[color:var(--muted)] mt-1">
+          {address
+            ? `Showing loans where the borrower is ${address}.`
+            : "Connect your wallet (top right) and sign a message to view loans you originated."}
+        </p>
+      </div>
 
       {address ? (
         <MyLoans address={address} />

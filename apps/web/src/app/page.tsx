@@ -1,10 +1,7 @@
-import Link from "next/link";
-import { ConnectButton } from "@/components/ConnectButton";
 import { Filters } from "@/components/Filters";
 import { KpiCards } from "@/components/KpiCards";
 import { LoanTable } from "@/components/LoanTable";
 import { getKpis, listLoans, type LoanQueryOptions } from "@/lib/queries";
-import { getSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -24,37 +21,19 @@ export default async function Home({
   if (params.status) filter.status = params.status as never;
   if (params.collateral) filter.collateralToken = params.collateral;
 
-  const [{ rows, total }, kpis, session] = await Promise.all([
+  const [{ rows, total }, kpis] = await Promise.all([
     listLoans({ filter, sort, direction: dir, limit, offset }),
     getKpis(),
-    getSession(),
   ]);
 
   return (
     <main className="space-y-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Floe — Loan Dashboard</h1>
-          <p className="text-sm text-[color:var(--muted)] mt-1">
-            Real-time view of every loan on Floe's onchain credit protocol on Base.
-          </p>
-        </div>
-        <nav className="flex items-center gap-3 text-sm">
-          <Link href="/" className="px-2 py-1 hover:underline">
-            Loans
-          </Link>
-          <Link href="/markets" className="px-2 py-1 hover:underline">
-            Markets
-          </Link>
-          <Link href="/me" className="px-2 py-1 hover:underline">
-            My loans
-          </Link>
-          <Link href="/chat" className="px-2 py-1 hover:underline">
-            Chat
-          </Link>
-          <ConnectButton initialAddress={session.address ?? undefined} />
-        </nav>
-      </header>
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Loans</h1>
+        <p className="text-sm text-[color:var(--muted)] mt-1">
+          Every loan on Floe's onchain credit protocol on Base.
+        </p>
+      </div>
 
       <KpiCards kpis={kpis} />
 

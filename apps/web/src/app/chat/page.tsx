@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { ChatClient } from "./ChatClient";
 
 export const dynamic = "force-dynamic";
@@ -8,18 +7,13 @@ export default function ChatPage() {
     !!process.env.GOOGLE_GENERATIVE_AI_API_KEY || !!process.env.GOOGLE_API_KEY;
   return (
     <main className="space-y-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <Link href="/" className="text-xs text-[color:var(--muted)] hover:underline">
-            ← Dashboard
-          </Link>
-          <h1 className="text-2xl font-semibold tracking-tight mt-1">Ask the dashboard</h1>
-          <p className="text-sm text-[color:var(--muted)] mt-1">
-            Natural-language Q&amp;A grounded in the indexer. Answers cite real loan IDs, link
-            to detail pages, and never invent numbers.
-          </p>
-        </div>
-      </header>
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Ask the dashboard</h1>
+        <p className="text-sm text-[color:var(--muted)] mt-1">
+          Natural-language Q&amp;A grounded in the indexer. Answers cite real loan IDs, link
+          to detail pages, and never invent numbers.
+        </p>
+      </div>
       {apiKeyConfigured ? (
         <ChatClient />
       ) : (
