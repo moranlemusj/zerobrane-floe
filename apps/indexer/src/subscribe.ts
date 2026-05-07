@@ -36,9 +36,16 @@ export function subscribeAll(opts: {
   const { clients, decoderAbi, matcherViewsAbi, lendingViewsAbi, log } = opts;
   const subClient = preferWss(clients);
 
+  log.info(
+    { matcher: CONTRACTS.matcher, oracleCount: Object.keys(ORACLES).length },
+    `subscribing — matcher=${CONTRACTS.matcher} oracles=${Object.keys(ORACLES).length}`,
+  );
+
   const unwatchMatcher = subClient.watchContractEvent({
     address: CONTRACTS.matcher,
     abi: decoderAbi,
+    onError: (err: Error) =>
+      log.error({ err: err.message, source: "matcher-sub" }, "matcher subscription error"),
     onLogs: async (logs: Log[]) => {
       const loanIds = new Set<string>();
       let lastBlock = 0n;
@@ -68,6 +75,11 @@ export function subscribeAll(opts: {
       address: feedAddress,
       abi: CHAINLINK_AGGREGATOR_ABI,
       eventName: "AnswerUpdated",
+      onError: (err: Error) =>
+        log.error(
+          { err: err.message, feed: name, source: "oracle-sub" },
+          `oracle subscription error (${name})`,
+        ),
       onLogs: async (logs: Log[]) => {
         const lastBlock = logs.at(-1)?.blockNumber ?? 0n;
         log.info(

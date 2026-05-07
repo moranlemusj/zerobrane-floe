@@ -44,12 +44,14 @@ async function main() {
 
   const clients = await buildClientsWithFallback();
   for (const w of clients.warnings) log.warn({}, w);
+  // Log loudly + as message text (not just JSON metadata) so it surfaces
+  // through any log renderer (Railway's stripped view in particular).
   log.info(
     {
       transport: clients.hasWebSocket ? "wss" : "http (polling)",
       rpcSource: clients.rpcSource,
     },
-    "clients ready",
+    `clients ready — transport=${clients.hasWebSocket ? "wss" : "http (polling)"} rpcSource=${clients.rpcSource}`,
   );
 
   const ping = await clients.db.execute(
