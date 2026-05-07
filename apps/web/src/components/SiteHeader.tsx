@@ -12,6 +12,7 @@ export function SiteHeader({ address }: { address?: string }) {
           <NavLink href="/">Loans</NavLink>
           <NavLink href="/markets">Markets</NavLink>
           <NavLink href="/activity">Activity</NavLink>
+          <NavLink href="/stress">Stress</NavLink>
           <NavLink href="/me">My loans</NavLink>
           <NavLink href="/chat">Chat</NavLink>
         </nav>

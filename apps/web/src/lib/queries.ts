@@ -291,6 +291,53 @@ export async function loansByMarket(): Promise<
   }>;
 }
 
+/**
+ * Active loans + the columns the stress simulator needs. Not a wrapper
+ * around listLoans because we want a tighter projection, no offset/sort
+ * juggling, and it can grow beyond the table's display columns later.
+ */
+export async function listActiveLoansForStress(): Promise<
+  Array<{
+    loanId: string;
+    loanToken: string;
+    collateralToken: string;
+    principalRaw: string;
+    accruedInterestRaw: string | null;
+    collateralAmountRaw: string;
+    liquidationLtvBps: number;
+    currentLtvBps: number | null;
+    borrower: string;
+    isUnderwater: boolean | null;
+  }>
+> {
+  const db = getDb();
+  const r = await db.execute(sql`
+    SELECT loan_id, loan_token, collateral_token,
+           principal_raw::text AS principal_raw,
+           accrued_interest_raw::text AS accrued_interest_raw,
+           collateral_amount_raw::text AS collateral_amount_raw,
+           liquidation_ltv_bps, current_ltv_bps, borrower, is_underwater
+    FROM loans
+    WHERE state = 'active'
+    ORDER BY current_ltv_bps DESC NULLS LAST
+  `);
+  return r.rows.map((row) => {
+    const x = row as Record<string, unknown>;
+    return {
+      loanId: String(x.loan_id),
+      loanToken: String(x.loan_token),
+      collateralToken: String(x.collateral_token),
+      principalRaw: String(x.principal_raw ?? "0"),
+      accruedInterestRaw: x.accrued_interest_raw ? String(x.accrued_interest_raw) : null,
+      collateralAmountRaw: String(x.collateral_amount_raw ?? "0"),
+      liquidationLtvBps: Number(x.liquidation_ltv_bps ?? 0),
+      currentLtvBps: x.current_ltv_bps == null ? null : Number(x.current_ltv_bps),
+      borrower: String(x.borrower),
+      isUnderwater: x.is_underwater == null ? null : Boolean(x.is_underwater),
+    };
+  });
+}
+
 export interface EventRow {
   txHash: string;
   logIndex: number;
