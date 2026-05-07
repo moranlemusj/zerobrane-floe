@@ -159,14 +159,23 @@ export function LoanTable({
                       </span>
                     </Td>
                     <Td>
-                      <a
-                        href={basescanAddressUrl(loan.borrower)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-mono text-xs hover:underline text-[color:var(--muted)]"
-                      >
-                        {shortAddress(loan.borrower)}
-                      </a>
+                      <span className="inline-flex items-center gap-1">
+                        <Link
+                          href={`/address/${loan.borrower}`}
+                          className="font-mono text-xs hover:underline text-[color:var(--muted)]"
+                        >
+                          {shortAddress(loan.borrower)}
+                        </Link>
+                        <a
+                          href={basescanAddressUrl(loan.borrower)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] text-[color:var(--muted)]/60 hover:text-white"
+                          aria-label="View on Basescan"
+                        >
+                          ↗
+                        </a>
+                      </span>
                     </Td>
                     <Td align="right">
                       <PrincipalCell loan={loan} />

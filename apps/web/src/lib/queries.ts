@@ -23,6 +23,7 @@ export interface LoanFilter {
   /** Display-band filter (mirrors the Status pill — health for active loans, lifecycle for closed). */
   status?: StatusFilter;
   borrower?: string;
+  lender?: string;
   collateralToken?: string;
   minLtvBps?: number;
   maxLtvBps?: number;
@@ -58,6 +59,8 @@ function buildLoanWhere(filter: LoanFilter | undefined): SQL | undefined {
   if (statusCond) conditions.push(statusCond);
   if (filter?.borrower)
     conditions.push(ilike(loans.borrower, `%${filter.borrower.toLowerCase()}%`));
+  if (filter?.lender)
+    conditions.push(ilike(loans.lender, `%${filter.lender.toLowerCase()}%`));
   if (filter?.collateralToken)
     conditions.push(eq(loans.collateralToken, filter.collateralToken.toLowerCase()));
   if (filter?.minLtvBps !== undefined)
@@ -286,4 +289,48 @@ export async function loansByMarket(): Promise<
     active: number;
     outstandingPrincipalRaw: string;
   }>;
+}
+
+export interface AddressStats {
+  asBorrower: number;
+  asLender: number;
+  asOperator: number;
+  activeAsBorrower: number;
+  activeAsLender: number;
+  totalBorrowedRaw: string; // sum of initial principals (loan-token base units, USDC ≈ 6 decimals)
+  totalLentRaw: string;
+  totalInterestPaidRaw: string;
+}
+
+/**
+ * Roll-up stats for a single wallet across all loans where it's the
+ * borrower, lender, or operator. Returns zeros (not nulls) when the
+ * address has no involvement, so callers can render unconditionally.
+ */
+export async function getAddressStats(addr: string): Promise<AddressStats> {
+  const db = getDb();
+  const lower = addr.toLowerCase();
+  const r = await db.execute(sql`
+    SELECT
+      COUNT(*) FILTER (WHERE borrower = ${lower})::int AS as_borrower,
+      COUNT(*) FILTER (WHERE lender   = ${lower})::int AS as_lender,
+      COUNT(*) FILTER (WHERE operator = ${lower})::int AS as_operator,
+      COUNT(*) FILTER (WHERE borrower = ${lower} AND state = 'active')::int AS active_as_borrower,
+      COUNT(*) FILTER (WHERE lender   = ${lower} AND state = 'active')::int AS active_as_lender,
+      COALESCE(SUM(initial_principal_raw) FILTER (WHERE borrower = ${lower}), 0)::text AS total_borrowed_raw,
+      COALESCE(SUM(initial_principal_raw) FILTER (WHERE lender   = ${lower}), 0)::text AS total_lent_raw,
+      COALESCE(SUM(total_interest_paid_raw) FILTER (WHERE borrower = ${lower}), 0)::text AS total_interest_paid_raw
+    FROM loans
+  `);
+  const row = r.rows[0] as Record<string, unknown>;
+  return {
+    asBorrower: Number(row.as_borrower ?? 0),
+    asLender: Number(row.as_lender ?? 0),
+    asOperator: Number(row.as_operator ?? 0),
+    activeAsBorrower: Number(row.active_as_borrower ?? 0),
+    activeAsLender: Number(row.active_as_lender ?? 0),
+    totalBorrowedRaw: String(row.total_borrowed_raw ?? "0"),
+    totalLentRaw: String(row.total_lent_raw ?? "0"),
+    totalInterestPaidRaw: String(row.total_interest_paid_raw ?? "0"),
+  };
 }

@@ -482,16 +482,20 @@ function formatHeld(
 
 function PartyRow({ label, address }: { label: string; address: string }) {
   return (
-    <div className="flex justify-between gap-2">
+    <div className="flex justify-between items-center gap-2">
       <dt className="text-[color:var(--muted)] text-xs">{label}</dt>
-      <dd>
+      <dd className="flex items-center gap-2">
+        <Link href={`/address/${address}`} className="font-mono text-xs hover:underline">
+          {shortAddress(address)}
+        </Link>
         <a
           href={basescanAddressUrl(address)}
           target="_blank"
           rel="noopener noreferrer"
-          className="font-mono text-xs hover:underline"
+          className="text-[10px] text-[color:var(--muted)]/60 hover:text-white"
+          aria-label="View on Basescan"
         >
-          {shortAddress(address)} ↗
+          ↗
         </a>
       </dd>
     </div>

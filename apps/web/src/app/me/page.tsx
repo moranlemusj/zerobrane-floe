@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { LoanTable } from "@/components/LoanTable";
 import { listLoans } from "@/lib/queries";
 import { getSession } from "@/lib/session";
@@ -13,9 +14,24 @@ export default async function MePage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Your loans</h1>
         <p className="text-sm text-[color:var(--muted)] mt-1">
-          {address
-            ? `Showing loans where the borrower is ${address}.`
-            : "Connect your wallet (top right) and sign a message to view loans you originated."}
+          {address ? (
+            <>
+              Showing loans where the borrower is{" "}
+              <Link
+                href={`/address/${address}`}
+                className="font-mono hover:underline"
+              >
+                {address}
+              </Link>
+              . For lender + operator activity, visit{" "}
+              <Link href={`/address/${address}`} className="hover:underline">
+                your full address page
+              </Link>
+              .
+            </>
+          ) : (
+            "Connect your wallet (top right) and sign a message to view loans you originated."
+          )}
         </p>
       </div>
 
