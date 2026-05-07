@@ -1,54 +1,139 @@
-# zerobrane-floe-agents
+# Floe — Loan Dashboard + Agent Bindings
 
-A monorepo of TypeScript packages that make [Floe](https://floe-labs.gitbook.io/docs) — onchain credit for AI agents on Base — usable from the [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) and [LangGraph](https://github.com/langchain-ai/langgraphjs).
+A live, chain-indexed loan dashboard for [Floe](https://floe-labs.gitbook.io/docs) — the onchain credit protocol on Base — plus the TypeScript packages that make Floe usable from the [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) and [LangGraph](https://github.com/langchain-ai/langgraphjs).
 
-Floe ships a [Coinbase AgentKit binding](https://github.com/Floe-Labs/agentkit-actions) and an [MCP server](https://github.com/Floe-Labs/floe-mcp-server). It does **not** ship a Claude Agent SDK or LangGraph binding. This monorepo fills that gap.
+**Live demo:** https://zerobrane-floe-web.vercel.app
 
-## Packages
+## What's in this repo
 
-| Package | What it does |
+```
+zerobrane-floe/
+├── apps/
+│   ├── web/        Next.js 16 dashboard (Vercel)
+│   └── indexer/    Long-running Node service: chain → Postgres (Railway)
+└── packages/
+    ├── data/       Shared Drizzle schema + Neon client
+    ├── core/       @floe-agents/core    — typed REST client
+    ├── claude/     floe-claude-agent    — Claude Agent SDK binding
+    └── langgraph/  floe-langgraph       — LangGraph middleware + agent
+```
+
+The **dashboard** (`apps/`) is the headline. The **agent bindings** (`packages/core`, `packages/claude`, `packages/langgraph`) are the foundation it builds on.
+
+---
+
+## The dashboard
+
+### Pages
+
+| Route | What it does |
 |---|---|
-| [`@floe-agents/core`](./packages/core) | Typed REST client over Floe's live `credit-api` (`https://credit-api.floelabs.xyz`), USDC value type and helpers, shared domain types. No agent-framework dependencies. The `client.proxyFetch` method is what agents use to make Floe-paid HTTP calls. |
-| [`floe-claude-agent`](./packages/claude) | Floe primitives for the Claude Agent SDK: MCP config helpers, `floeCreditPreflight` PreToolUse hook, `floeBorrowEventLogger` PostToolUse hook, spend-limit setup helpers, Floe Skill markdown. |
-| [`floe-langgraph`](./packages/langgraph) | Floe instrumentation middleware for LangGraph. One export — `withFloe` — wraps any node with credit preflight + spend telemetry. Two demos: `with-floe-search` (StateGraph + middleware) and `agent` (`createReactAgent` with a paid `run_code` tool). |
+| `/` | All loans table — 13 columns, every numeric/date column sortable, status filter dropdown, KPI strip, last-reconciled badge |
+| `/loan/:id` | Per-loan detail with "At origination" + "Current state" stat blocks, schedule (matched / closed / held-for / % of term), event timeline with collateral amounts, stress simulator with live oracle freshness |
+| `/markets` | Per-market aggregates + Chainlink oracle prices with per-feed publish freshness |
+| `/me` | Personal view — wallet sign-in (EIP-191, no RainbowKit), session-gated loan list filtered to the connected address |
+| `/chat` | Natural-language Q&A over the indexer DB + Floe REST. 8 tools incl. the **loan teller** that constructs the exact `curl` you'd run to borrow on Floe — preview-only, never executes |
 
-`floe-claude-agent` and `floe-langgraph` both depend on `@floe-agents/core`. The two framework bindings are independent — pick one or both.
+### Architecture
 
-## Design rule
+```
+        Base mainnet                  Neon Postgres                  Vercel
+       ┌─────────────┐               ┌─────────────┐              ┌─────────────┐
+       │  Matcher    │               │             │              │  Next.js 16 │
+       │   proxy     │               │   loans     │              │             │
+       │             │  events       │   events    │  RSC reads   │  /          │
+       │  Chainlink  │ ─────────►   │   markets   │ ─────────►  │  /loan/:id  │
+       │  ETH/USD    │  (WebSocket  │   oracles   │              │  /markets   │
+       │  Chainlink  │   + 10-min   │   indexer_  │              │  /me        │
+       │  BTC/USD    │   reconcile)  │     state   │              │  /chat      │
+       └─────────────┘               └─────────────┘              └─────────────┘
+              ▲                              ▲                          │
+              │ view reads                   │ writes                   │ tool calls
+              │ (latestRoundData,            │                          │
+              │  getLoan, getCurrentLtvBps)  │                          ▼
+              │                              │                   Gemini 2.5 Flash
+              │                              │                   (chatbot LLM)
+              │                              │
+              └──────────────────┐    ┌──────┘
+                                 │    │
+                              ┌──┴────┴──┐
+                              │  Indexer │  Long-running daemon (Railway)
+                              │  Node    │  • viem WebSocket subs on the
+                              │  + viem  │    matcher proxy + Chainlink
+                              │  + tsx   │    underlyings
+                              │          │  • 10-min reconcile timer
+                              └──────────┘  • initial-conditions backfill
+                                            • close-snapshot decode
+```
 
-**Floe is a config concern, not a coding concern.** You write your agent or graph normally; the binding handles credit preflight, spend caps, x402 settlement, and event logging through interception primitives that match the host framework's idioms.
+Reads are **chain-primary**: `getLoan()`, `getCurrentLtvBps()`, `isLoanUnderwater()` over Multicall3, hydrated into Postgres.
 
-The bindings only call **real** Floe endpoints — no fake `debit` calls, no simulated top-ups. Floe's facilitator handles borrowing implicitly when paid HTTP needs to settle; the binding's job is to *preflight* (will this call succeed?) and to *observe* (how much did this graph step actually consume?).
+Some derived data isn't on chain or in events directly — Floe's matcher emits hash-only events, doesn't preserve close metadata after repay, etc. The indexer recovers those from transaction receipts and the matcher's own snapshot events. Result: the dashboard shows initial conditions, total interest paid, time-held, and "early/on-time/overdue" badges that the protocol itself doesn't expose.
 
-## How Floe works (the model these bindings assume)
+### Run locally
 
-Floe is a credit/borrow protocol with a payment facilitator on Base. Agent flow:
+Requirements: Node 20+, pnpm, a Neon Postgres URL, an Alchemy API key, a Google Gemini API key.
 
-1. Register once: `POST /v1/agents/pre-register` → user signs an on-chain operator delegation against collateral + credit limit → `POST /v1/agents/register` → Floe issues a `floe_live_...` API key.
-2. Make paid HTTP calls. Either Floe-proxied (`POST /v1/proxy/fetch`) or direct to an x402-protected URL with the API key in the auth chain. The Floe facilitator handles x402 settlement in USDC, auto-borrowing against the credit line if needed, gas-sponsored.
-3. Monitor credit: `GET /v1/agents/credit-remaining`, `GET /v1/agents/loan-state`. Cap spending: `PUT /v1/agents/spend-limit`.
+```bash
+git clone https://github.com/moranlemusj/zerobrane-floe.git
+cd zerobrane-floe
+pnpm install
 
-There is no `POST /v1/credit/debit` endpoint. Money moves only via borrow / x402-settle / repay.
+# .env at repo root
+cat > .env <<'ENV'
+NEON_DATABASE_URL=postgres://...           # required by web + indexer
+ALCHEMY_API_KEY=...                        # required by indexer
+GOOGLE_API_KEY=...                         # required by /chat
+IRON_SESSION_PASSWORD=...                  # required by /me; ≥ 32 chars (openssl rand -hex 32)
+FLOE_LIVE_API_KEY=floe_live_...            # optional; only used by /chat's Floe REST tool
+ENV
 
-## Mock vs Real
+# One-time: push the Drizzle schema to your Neon DB
+pnpm --filter @floe-dashboard/data exec drizzle-kit push --force
 
-Every package ships **both**:
+# Dev: indexer (one terminal) + web (another)
+cd apps/indexer && pnpm dev
+cd apps/web     && pnpm dev   # http://localhost:3000
+```
 
-- **Mocked e2e flow** — runs against bundled mock servers, no API keys required, green in CI.
-- **Real-key e2e flow** — flips to live Floe + live LLM via env vars. Documented per-package.
+The indexer will discover loans via `getLoan(1..N)` probe + backfill events from the configured `INITIAL_LOOKBACK_BLOCKS` window, hydrate everything, and start live WebSocket subscriptions. ~30s on a fresh DB to the first usable dashboard render.
 
-The bindings code is unchanged across modes — only URLs and keys flip via env. Each package's README has a "Mock vs Real" section with copy-pasteable commands.
+### Deploy
+
+| Layer | Where | Notes |
+|---|---|---|
+| Postgres | Neon | Created upfront. Schema pushed via Drizzle. |
+| Web app | Vercel (auto from `main`) | Set `NEON_DATABASE_URL`, `IRON_SESSION_PASSWORD`, `GOOGLE_API_KEY` in Vercel project env. Root directory: `apps/web`. |
+| Indexer | Railway (auto from `main`) | Build: `pnpm install --frozen-lockfile && pnpm --filter @floe-dashboard/indexer... build`. Start: `pnpm --filter @floe-dashboard/indexer start`. Env: `NEON_DATABASE_URL`, `ALCHEMY_API_KEY`, `LOG_LEVEL=info`. Restart policy: Always. |
+
+Both targets watch `main` — `git push` triggers auto-redeploy of whichever target's files changed.
+
+### Acceptance / what works
+
+- ✅ All 80 historical loans indexed from the matcher's deployment block. Initial principal/collateral derived from match-tx receipts. Close timestamps + total interest paid recovered from the matcher's snapshot events.
+- ✅ Live updates via Chainlink `AnswerUpdated` subscription on the **underlying aggregator** (not the proxy — see [discovery notes](./discovery-report.md)). Oracle ticks fire every 15-30 min and trigger re-hydration of every active loan with that collateral.
+- ✅ Wallet sign-in via EIP-191 + iron-session cookie. No RainbowKit (saves ~150 KB client JS).
+- ✅ Chatbot with 8 tools incl. the loan teller. Refuses to execute borrows; returns curl + LTV math + warnings.
+- ✅ `pnpm -r typecheck && pnpm -r build && pnpm -r test` clean across the monorepo.
+
+---
+
+## The agent bindings
+
+These exist because Floe ships [Coinbase AgentKit](https://github.com/Floe-Labs/agentkit-actions) and [MCP](https://github.com/Floe-Labs/floe-mcp-server) bindings but no Claude Agent SDK or LangGraph binding. Each is published, tested against both mocks and the live Floe API.
+
+| Package | What it is |
+|---|---|
+| [`@floe-agents/core`](./packages/core) | Typed REST client over `https://credit-api.floelabs.xyz`. USDC value type, x402 helpers, shared domain types. No agent-framework dependencies. |
+| [`floe-claude-agent`](./packages/claude) | Floe primitives for the Claude Agent SDK: MCP config, `floeCreditPreflight` PreToolUse hook, spend-limit setup, Floe Skill markdown. |
+| [`floe-langgraph`](./packages/langgraph) | One export — `withFloe` — that wraps any LangGraph node with credit preflight + spend telemetry. Two demos: `with-floe-search` (StateGraph + middleware) and `agent` (`createReactAgent` with a paid `run_code` tool). |
+
+**Design rule**: Floe is a config concern, not a coding concern. The bindings call only **real** Floe endpoints — no fake `debit` calls, no simulated top-ups. Floe's facilitator handles borrowing implicitly when paid HTTP needs to settle; the binding's job is to *preflight* and to *observe*.
 
 ```bash
 pnpm install
-
-# Build everything
 pnpm -r build
-
-# Test everything (125 mocked tests; real-key tests skip without env)
-pnpm -r test
-
-# Typecheck
+pnpm -r test           # 115+ mocked tests
 pnpm -r typecheck
 
 # Demos against bundled mocks (no API keys needed)
@@ -57,54 +142,9 @@ pnpm --filter floe-langgraph     example:with-floe-search
 pnpm --filter floe-langgraph     example:agent:dry
 ```
 
-For the live-key paths, see each package's README — the env vars are: `FLOE_API_KEY` (Floe), `ANTHROPIC_API_KEY` (Claude demo), `MOCK_SEARCH_URL` / `MOCK_EXEC_URL` (real x402 endpoints).
+For real-key flows, see each package's own README — env vars are `FLOE_API_KEY`, `ANTHROPIC_API_KEY`, `MOCK_SEARCH_URL` / `MOCK_EXEC_URL`.
 
-## Demo split — middleware vs agent
-
-The two LangGraph demos illustrate different patterns:
-
-```
-floe-langgraph
-├── withFloe (the only export)
-│
-└── examples/
-    ├── with-floe-search/  ← StateGraph + withFloe wrapping a custom paid node
-    └── agent/             ← createReactAgent with a paid `run_code` tool
-                              (mirrors the Claude package's agent demo)
-```
-
-For other paid HTTP flows (search, scrape, LLM gateways), wrap your own node with `withFloe`. The middleware emits structured `WithFloeEvent`s for telemetry, dashboards, and alerts. For LLM-driven agents, look at the `agent/` demo.
-
-## Status
-
-| | Mocked tests | Build | Demo |
-|---|---|---|---|
-| `@floe-agents/core` | 60 ✅ + 5 gated real-API | ✅ | n/a |
-| `floe-claude-agent` | 45 ✅ | ✅ | `example:agent:dry` ✅ |
-| `floe-langgraph` | 10 ✅ | ✅ | `example:with-floe-search` ✅ / `example:agent:dry` ✅ |
-| **Total** | **115 mocked ✅** | **3/3 ✅** | **3/3 demos ✅** |
-
-Real-key e2e flows are documented in each package's README and tested via `pnpm test:real` where applicable (`@floe-agents/core` only — the framework-binding real flows require live LLM keys to run end-to-end).
-
-## Repo layout
-
-```
-zerobrane-floe-agents/
-├── packages/
-│   ├── core/                          # @floe-agents/core
-│   ├── claude/                        # floe-claude-agent
-│   │   └── examples/code-execution/   # mock-floe, mock-exec, agent demo
-│   └── langgraph/                     # floe-langgraph
-│       └── examples/
-│           ├── with-floe-search/      # StateGraph + withFloe demo
-│           ├── agent/                 # createReactAgent + paid run_code tool
-│           └── lib/                   # shared mock-floe + start helpers
-├── pnpm-workspace.yaml
-├── tsconfig.base.json
-├── biome.json
-├── README.md
-└── LICENSE
-```
+---
 
 ## License
 
