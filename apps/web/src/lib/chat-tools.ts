@@ -93,7 +93,7 @@ export const chatTools = {
         .optional()
         .default("matchedAt"),
       direction: z.enum(["asc", "desc"]).optional().default("desc"),
-      limit: z.number().int().min(1).max(50).optional().default(10),
+      limit: z.number().int().min(1).max(500).optional().default(50),
     }),
     async execute({ status, borrower, collateralToken, sort, direction, limit }) {
       const result = await listLoans({
@@ -132,7 +132,7 @@ export const chatTools = {
     description:
       "Most recent N matcher events across all loans (matched, collateral added/withdrawn, etc.).",
     inputSchema: z.object({
-      limit: z.number().int().min(1).max(50).optional().default(10),
+      limit: z.number().int().min(1).max(200).optional().default(20),
     }),
     async execute({ limit }) {
       const db = getDb();

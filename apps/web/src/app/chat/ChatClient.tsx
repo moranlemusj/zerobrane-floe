@@ -132,34 +132,28 @@ interface ChatMessage {
 
 function renderMessage(m: ChatMessage) {
   const parts = m.parts ?? [];
+  // Tool-call parts (the wire-level "tool-foo" entries with their inputs and
+  // raw outputs) are intentionally not rendered. Showing them leaked tool
+  // names + input/output JSON to the end user, which (a) looked debug-y and
+  // (b) revealed implementation detail. The pending-tool-call state is shown
+  // by the typing indicator at the assistant level, not per part.
+  const textParts = parts.filter((p) => p.type === "text");
+  const isToolPending =
+    m.role === "assistant" &&
+    textParts.length === 0 &&
+    parts.some((p) => p.type?.startsWith("tool-"));
+  if (isToolPending) {
+    return (
+      <span className="italic text-[color:var(--muted)] text-xs">checking the data…</span>
+    );
+  }
   return (
     <div className="space-y-2">
-      {parts.map((p, i) => {
-        if (p.type === "text") {
-          return (
-            <div key={i} className="whitespace-pre-wrap break-words text-sm">
-              {linkifyLoanIds(p.text ?? "")}
-            </div>
-          );
-        }
-        if (p.type?.startsWith("tool-")) {
-          const toolName = p.type.replace(/^tool-/, "");
-          return (
-            <details key={i} className="text-[11px] text-[color:var(--muted)]">
-              <summary className="cursor-pointer hover:text-white">
-                ⚙ {toolName}{" "}
-                <span className="opacity-60">
-                  ({p.state === "output-available" ? "✓" : "…"})
-                </span>
-              </summary>
-              <pre className="mt-2 overflow-x-auto rounded bg-black/30 p-2 text-[10px]">
-                {JSON.stringify(p.input, null, 2)}
-              </pre>
-            </details>
-          );
-        }
-        return null;
-      })}
+      {textParts.map((p, i) => (
+        <div key={i} className="whitespace-pre-wrap break-words text-sm">
+          {linkifyLoanIds(p.text ?? "")}
+        </div>
+      ))}
     </div>
   );
 }
