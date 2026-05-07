@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { formatAmount, tokenInfo } from "@/lib/format";
+import { formatAmount, formatRelativeTime, tokenInfo } from "@/lib/format";
 import { listMarkets, listOracles, loansByMarket } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -138,7 +138,10 @@ export default async function MarketsPage() {
                       {o.latestRoundId.slice(0, 14)}…
                     </td>
                     <td className="py-2 text-right text-[11px] text-[color:var(--muted)]">
-                      block {o.observedAtBlock?.toString()}
+                      <span className="font-mono">
+                        {o.updatedAt ? formatRelativeTime(o.updatedAt) : "—"}
+                      </span>{" "}
+                      · block {o.observedAtBlock?.toString()}
                     </td>
                   </tr>
                 );
