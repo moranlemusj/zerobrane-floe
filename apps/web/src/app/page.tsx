@@ -3,7 +3,13 @@ import { ConnectButton } from "@/components/ConnectButton";
 import { Filters } from "@/components/Filters";
 import { KpiCards } from "@/components/KpiCards";
 import { LoanTable } from "@/components/LoanTable";
-import { getKpis, listLoans, type LoanQueryOptions } from "@/lib/queries";
+import { OracleStrip } from "@/components/OracleStrip";
+import {
+  getKpis,
+  listLoans,
+  listOracles,
+  type LoanQueryOptions,
+} from "@/lib/queries";
 import { getSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -24,9 +30,10 @@ export default async function Home({
   if (params.status) filter.status = params.status as never;
   if (params.collateral) filter.collateralToken = params.collateral;
 
-  const [{ rows, total }, kpis, session] = await Promise.all([
+  const [{ rows, total }, kpis, oracles, session] = await Promise.all([
     listLoans({ filter, sort, direction: dir, limit, offset }),
     getKpis(),
+    listOracles(),
     getSession(),
   ]);
 
@@ -57,6 +64,8 @@ export default async function Home({
       </header>
 
       <KpiCards kpis={kpis} />
+
+      <OracleStrip oracles={oracles} />
 
       <Filters searchParams={params} />
 

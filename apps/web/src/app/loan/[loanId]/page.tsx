@@ -5,6 +5,7 @@ import {
   basescanAddressUrl,
   basescanTxUrl,
   formatAmount,
+  formatRelativeTime,
   healthBand,
   shortAddress,
   toHumanNumber,
@@ -292,11 +293,17 @@ export default async function LoanDetailPage({
 
       {oracle && collateralPriceUsd !== null && (
         <section className="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-4">
-          <h2 className="text-sm font-medium mb-3">Stress simulator</h2>
+          <h2 className="text-sm font-medium mb-2 flex items-baseline justify-between gap-3">
+            <span>Stress simulator</span>
+            <span className="text-[11px] font-normal text-[color:var(--muted)]">
+              oracle ${collateralPriceUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })} ·
+              updated {formatRelativeTime(oracle.updatedAt)} (block{" "}
+              {oracle.observedAtBlock})
+            </span>
+          </h2>
           <p className="text-xs text-[color:var(--muted)] mb-4">
-            What happens if {collateralTok.symbol} drops? Computed client-free from current oracle ($
-            {collateralPriceUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}) and the
-            loan's collateral amount.
+            What happens if {collateralTok.symbol} drops? Computed client-free from the
+            most recent Chainlink {oracle.description} tick and the loan's collateral amount.
           </p>
           <table className="w-full text-sm">
             <thead className="text-[11px] uppercase tracking-wide text-[color:var(--muted)]">

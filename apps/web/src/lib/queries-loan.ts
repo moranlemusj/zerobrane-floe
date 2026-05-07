@@ -44,10 +44,32 @@ export async function getLoanEvents(loanId: string): Promise<LoanEvent[]> {
 /** Latest oracle answer for a token's collateral feed (by description match). */
 export async function getOracleByDescription(
   description: string,
-): Promise<{ description: string; decimals: number; latestAnswer: string } | null> {
+): Promise<{
+  description: string;
+  decimals: number;
+  latestAnswer: string;
+  updatedAt: string;
+  observedAtBlock: string;
+} | null> {
   const db = getDb();
-  const r = await db.execute(
-    sql`SELECT description, decimals, latest_answer AS "latestAnswer" FROM oracles WHERE description = ${description} LIMIT 1`,
+  const r = await db.execute(sql`
+    SELECT description, decimals,
+           latest_answer::text AS "latestAnswer",
+           updated_at::text AS "updatedAt",
+           observed_at_block::text AS "observedAtBlock"
+    FROM oracles
+    WHERE description = ${description}
+    LIMIT 1
+  `);
+  return (
+    (r.rows[0] as
+      | {
+          description: string;
+          decimals: number;
+          latestAnswer: string;
+          updatedAt: string;
+          observedAtBlock: string;
+        }
+      | undefined) ?? null
   );
-  return (r.rows[0] as { description: string; decimals: number; latestAnswer: string } | undefined) ?? null;
 }
