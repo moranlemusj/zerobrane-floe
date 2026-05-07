@@ -49,6 +49,9 @@ export default async function Home({
           <Link href="/me" className="px-2 py-1 hover:underline">
             My loans
           </Link>
+          <Link href="/chat" className="px-2 py-1 hover:underline">
+            Chat
+          </Link>
           <ConnectButton initialAddress={session.address ?? undefined} />
         </nav>
       </header>
