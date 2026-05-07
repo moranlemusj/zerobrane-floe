@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { ConnectButton } from "@/components/ConnectButton";
 import { Filters } from "@/components/Filters";
 import { KpiCards } from "@/components/KpiCards";
 import { LoanTable } from "@/components/LoanTable";
 import { getKpis, listLoans, type LoanQueryOptions } from "@/lib/queries";
+import { getSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -22,9 +24,10 @@ export default async function Home({
   if (params.status) filter.status = params.status as never;
   if (params.collateral) filter.collateralToken = params.collateral;
 
-  const [{ rows, total }, kpis] = await Promise.all([
+  const [{ rows, total }, kpis, session] = await Promise.all([
     listLoans({ filter, sort, direction: dir, limit, offset }),
     getKpis(),
+    getSession(),
   ]);
 
   return (
@@ -43,6 +46,10 @@ export default async function Home({
           <Link href="/markets" className="px-2 py-1 hover:underline">
             Markets
           </Link>
+          <Link href="/me" className="px-2 py-1 hover:underline">
+            My loans
+          </Link>
+          <ConnectButton initialAddress={session.address ?? undefined} />
         </nav>
       </header>
 

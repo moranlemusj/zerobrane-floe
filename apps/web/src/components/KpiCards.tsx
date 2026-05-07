@@ -1,6 +1,18 @@
 import { formatAmount } from "@/lib/format";
 import type { KpiSummary } from "@/lib/queries";
 
+function formatRelativeTime(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 0) return "just now";
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  return `${Math.floor(hr / 24)}d ago`;
+}
+
 export function KpiCards({ kpis }: { kpis: KpiSummary }) {
   // Active principal is in USDC (6 decimals) for the markets we have.
   const usdcOut = formatAmount(kpis.totalPrincipalActiveRaw, 6, 2);
@@ -18,7 +30,9 @@ export function KpiCards({ kpis }: { kpis: KpiSummary }) {
     {
       label: "Indexer @ block",
       value: kpis.lastBlock ?? "—",
-      sub: "Base mainnet",
+      sub: kpis.lastReconciledAt
+        ? `synced ${formatRelativeTime(kpis.lastReconciledAt)}`
+        : "Base mainnet",
     },
   ];
   return (

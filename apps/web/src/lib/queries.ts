@@ -213,6 +213,7 @@ export interface KpiSummary {
   totalPrincipalActiveRaw: string;
   marketCount: number;
   lastBlock: string | null;
+  lastReconciledAt: string | null; // ISO timestamp; null on fresh DB
 }
 
 export async function getKpis(): Promise<KpiSummary> {
@@ -228,7 +229,9 @@ export async function getKpis(): Promise<KpiSummary> {
     FROM loans
   `);
   const marketCount = await db.select({ c: count() }).from(markets);
-  const lastBlock = await db.execute(sql`SELECT value FROM indexer_state WHERE key = 'lastBlock'`);
+  const lastBlock = await db.execute(
+    sql`SELECT value, updated_at FROM indexer_state WHERE key = 'lastBlock'`,
+  );
   const r = summary.rows[0] as {
     total: number;
     active: number;
@@ -245,7 +248,10 @@ export async function getKpis(): Promise<KpiSummary> {
     underwaterLoans: r.underwater,
     totalPrincipalActiveRaw: r.active_principal,
     marketCount: Number(marketCount[0]?.c ?? 0),
-    lastBlock: (lastBlock.rows[0] as { value: string } | undefined)?.value ?? null,
+    lastBlock:
+      (lastBlock.rows[0] as { value: string } | undefined)?.value ?? null,
+    lastReconciledAt:
+      (lastBlock.rows[0] as { updated_at: string | Date } | undefined)?.updated_at?.toString() ?? null,
   };
 }
 
