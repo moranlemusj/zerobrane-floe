@@ -16,6 +16,7 @@ import {
   snapshotOracle,
 } from "./oracle";
 import { applyEvent } from "./events";
+import { backfillInitialConditions } from "./backfill-initial";
 import { hydrateLoans } from "./hydrate";
 import { setLastBlock } from "./state";
 import { preferWss, type IndexerClients } from "./clients";
@@ -51,6 +52,7 @@ export async function subscribeAll(opts: {
       try {
         const loanIds = new Set<string>();
         let lastBlock = 0n;
+        let sawNewMatch = false;
         for (const entry of logs) {
           const blockNumber = entry.blockNumber ?? 0n;
           if (blockNumber > lastBlock) lastBlock = blockNumber;
@@ -61,11 +63,24 @@ export async function subscribeAll(opts: {
             "matcher event",
           );
           for (const id of result.loanIds) loanIds.add(id.toString());
+          if (result.eventName === "LogIntentsMatched") sawNewMatch = true;
         }
         if (loanIds.size > 0) {
           const ids = Array.from(loanIds).map(BigInt);
           const hr = await hydrateLoans(clients, matcherViewsAbi, lendingViewsAbi, ids, lastBlock);
           log.info({ ...hr, loanIds: ids.map(String) }, "rehydrated after matcher event(s)");
+        }
+        // New loans need initial principal/collateral backfilled from the
+        // match-tx receipt — the matcher event itself only emits hashes.
+        // Idempotent: only touches rows where initialPrincipalRaw IS NULL.
+        if (sawNewMatch) {
+          const ic = await backfillInitialConditions(
+            clients,
+            log.child({ phase: "live-init" }),
+          );
+          if (ic.updated + ic.skipped + ic.missing > 0) {
+            log.info(ic, "live initial-conditions backfill done");
+          }
         }
         if (lastBlock > 0n) await setLastBlock(clients.db, lastBlock);
       } catch (err) {
