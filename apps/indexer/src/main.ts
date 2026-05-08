@@ -36,6 +36,18 @@ import { type SubscriptionHandles, subscribeAll } from "./subscribe";
 
 const log = pino({ level: process.env.LOG_LEVEL ?? "info" }).child({ service: "indexer" });
 
+// Defense-in-depth: a stray rejection inside a viem watcher or a transient
+// Neon `fetch failed` should not kill the process. Local handlers already
+// cover the known paths; this is the safety net for anything that slips
+// past them.
+process.on("unhandledRejection", (reason) => {
+  const err = reason instanceof Error ? reason.message : String(reason);
+  log.error({ err }, "unhandledRejection — keeping process alive");
+});
+process.on("uncaughtException", (err) => {
+  log.error({ err: err.message, stack: err.stack }, "uncaughtException — keeping process alive");
+});
+
 const ONE_SHOT = process.env.INDEXER_ONE_SHOT === "1";
 const RECONCILE_INTERVAL_MS = Number(process.env.RECONCILE_INTERVAL_MS ?? 10 * 60_000);
 
