@@ -10,7 +10,10 @@
 
 import pino from "pino";
 import { buildClientsWithFallback } from "../src/clients";
-import { backfillInitialConditions } from "../src/backfill-initial";
+import {
+  backfillCloseTimestamps,
+  backfillInitialConditions,
+} from "../src/backfill-initial";
 
 async function main() {
   const log = pino({ level: process.env.LOG_LEVEL ?? "info" }).child({
@@ -18,8 +21,12 @@ async function main() {
   });
   const clients = await buildClientsWithFallback();
   for (const w of clients.warnings) log.warn({}, w);
-  const result = await backfillInitialConditions(clients, log);
-  log.info(result, "done");
+  const initial = await backfillInitialConditions(clients, log);
+  log.info(initial, "initial conditions done");
+  // Closed loans depend on initial_principal_raw to compute interest paid,
+  // so this must run *after* the initial pass.
+  const close = await backfillCloseTimestamps(clients.db);
+  log.info(close, "close timestamps done");
   process.exit(0);
 }
 

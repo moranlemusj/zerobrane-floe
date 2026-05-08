@@ -46,6 +46,7 @@ export async function backfillInitialConditions(
     .select({
       loanId: loans.loanId,
       borrower: loans.borrower,
+      lender: loans.lender,
       loanToken: loans.loanToken,
       collateralToken: loans.collateralToken,
     })
@@ -141,6 +142,7 @@ export async function backfillInitialConditions(
 
 interface LoanTokens {
   borrower: string;
+  lender: string;
   loanToken: string;
   collateralToken: string;
 }
@@ -150,22 +152,25 @@ function extractAmounts(
   t: LoanTokens,
 ): { principal: bigint; collateral: bigint } | null {
   const borrowerAddr = getAddress(t.borrower);
+  const lenderAddr = getAddress(t.lender);
   const loanTokenAddr = getAddress(t.loanToken);
   const collateralTokenAddr = getAddress(t.collateralToken);
-  let principal: bigint | null = null;
+  // Matched principal = lender's total loanToken commitment in the
+  // match-tx. Equals the borrower's debt — the matcher commission gets
+  // routed out separately (lender → matcher), so we sum ALL outgoing
+  // loanToken transfers from the lender. Using "to === borrower" was
+  // wrong: that captures the post-commission disbursement, not the debt.
+  let principal = 0n;
   let collateral: bigint | null = null;
   for (const lg of receipt.logs) {
     if (lg.topics[0]?.toLowerCase() !== TRANSFER_TOPIC) continue;
     if (lg.topics.length < 3) continue;
     const from = topicToAddress(lg.topics[1]);
-    const to = topicToAddress(lg.topics[2]);
     const tokenAddr = getAddress(lg.address);
     const value = BigInt(lg.data);
-    // Borrower receives the loan token (principal).
-    if (principal === null && tokenAddr === loanTokenAddr && to === borrowerAddr) {
-      principal = value;
+    if (tokenAddr === loanTokenAddr && from === lenderAddr) {
+      principal += value;
     }
-    // Borrower posts the collateral token.
     if (
       collateral === null &&
       tokenAddr === collateralTokenAddr &&
@@ -173,9 +178,8 @@ function extractAmounts(
     ) {
       collateral = value;
     }
-    if (principal !== null && collateral !== null) break;
   }
-  if (principal === null || collateral === null) return null;
+  if (principal === 0n || collateral === null) return null;
   return { principal, collateral };
 }
 
