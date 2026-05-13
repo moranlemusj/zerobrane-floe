@@ -182,3 +182,15 @@ export async function activeLoanIdsForCollaterals(
     .where(and(inArray(loans.collateralToken, lowered), eq(loans.state, "active")));
   return rows.map((r) => BigInt(r.loanId));
 }
+
+/** All active-loan IDs, regardless of collateral. Used by the reconcile loop
+ *  to refresh accrued interest for loans whose collateral has no oracle
+ *  (e.g. USDC/USDC markets) — those never get re-hydrated via the oracle
+ *  path and would otherwise stay frozen at match-time values. */
+export async function allActiveLoanIds(db: Db): Promise<bigint[]> {
+  const rows = await db
+    .select({ loanId: loans.loanId })
+    .from(loans)
+    .where(eq(loans.state, "active"));
+  return rows.map((r) => BigInt(r.loanId));
+}

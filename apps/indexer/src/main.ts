@@ -30,7 +30,7 @@ import { buildClientsWithFallback } from "./clients";
 import { enrichUnknownMarkets } from "./enrich-markets";
 import { hydrateLoans } from "./hydrate";
 import { syncMarkets } from "./markets";
-import { initialOracleSync } from "./oracle";
+import { allActiveLoanIds, initialOracleSync } from "./oracle";
 import { getLastBlock, setLastBlock } from "./state";
 import { type SubscriptionHandles, subscribeAll } from "./subscribe";
 
@@ -180,12 +180,24 @@ async function main() {
       if (newHead <= lb) return;
       log.info({ from: (lb + 1n).toString(), to: newHead.toString() }, "reconciliation pass…");
       const result = await backfillEvents(clients, abis.matcherDecodeAbi, lb + 1n, newHead);
-      if (result.loanIdsTouched.length > 0) {
+
+      // Refresh accrued interest + LTV for every active loan. The event-driven
+      // and oracle-driven hydration paths together miss loans whose collateral
+      // has no Chainlink oracle (e.g. USDC/USDC markets): no oracle ticks →
+      // never re-hydrated → accrued_interest stays frozen at match-time. This
+      // blanket pass is cheap (single multicall) and guarantees freshness.
+      const eventTouched = new Set(result.loanIdsTouched.map((b) => b.toString()));
+      const active = await allActiveLoanIds(clients.db);
+      const idsToHydrate = Array.from(
+        new Set([...eventTouched, ...active.map((b) => b.toString())]),
+      ).map(BigInt);
+
+      if (idsToHydrate.length > 0) {
         const hr = await hydrateLoans(
           clients,
           abis.matcherViews,
           abis.lendingViewsAbi,
-          result.loanIdsTouched,
+          idsToHydrate,
           newHead,
         );
         const ic = await backfillInitialConditions(clients, log.child({ phase: "reconcile-init" }));
@@ -196,14 +208,15 @@ async function main() {
             initialConditions: ic,
             closeTimestamps: ct,
             totalLogs: result.totalLogs,
-            loanIds: result.loanIdsTouched.length,
+            eventTouched: eventTouched.size,
+            activeRefreshed: active.length,
           },
           "reconcile + hydrate done",
         );
       } else {
         log.info(
           { totalLogs: result.totalLogs, decodedLogs: result.decodedLogs },
-          "reconcile done (no loan-touching events)",
+          "reconcile done (no active loans)",
         );
       }
       await setLastBlock(clients.db, newHead);
