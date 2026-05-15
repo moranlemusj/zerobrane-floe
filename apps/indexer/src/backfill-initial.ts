@@ -140,14 +140,14 @@ export async function backfillInitialConditions(
   return { updated, skipped, missing };
 }
 
-interface LoanTokens {
+export interface LoanTokens {
   borrower: string;
   lender: string;
   loanToken: string;
   collateralToken: string;
 }
 
-function extractAmounts(
+export function extractAmounts(
   receipt: TransactionReceipt,
   t: LoanTokens,
 ): { principal: bigint; collateral: bigint } | null {

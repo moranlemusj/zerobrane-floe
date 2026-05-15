@@ -18,6 +18,8 @@ import {
 import { applyEvent } from "./events";
 import { backfillInitialConditions } from "./backfill-initial";
 import { hydrateLoans } from "./hydrate";
+import { containsNewMatch } from "./match-detect";
+import { safelyRun } from "./safely-run";
 import { setLastBlock } from "./state";
 import { preferWss, type IndexerClients } from "./clients";
 import { CHAINLINK_AGGREGATOR_ABI } from "./abis";
@@ -48,11 +50,11 @@ export async function subscribeAll(opts: {
     abi: decoderAbi,
     onError: (err: Error) =>
       log.error({ err: err.message, source: "matcher-sub" }, "matcher subscription error"),
-    onLogs: async (logs: Log[]) => {
-      try {
+    onLogs: (logs: Log[]) =>
+      safelyRun("matcher-batch", log, async () => {
         const loanIds = new Set<string>();
         let lastBlock = 0n;
-        let sawNewMatch = false;
+        const eventNames: Array<string | null> = [];
         for (const entry of logs) {
           const blockNumber = entry.blockNumber ?? 0n;
           if (blockNumber > lastBlock) lastBlock = blockNumber;
@@ -63,7 +65,7 @@ export async function subscribeAll(opts: {
             "matcher event",
           );
           for (const id of result.loanIds) loanIds.add(id.toString());
-          if (result.eventName === "LogIntentsMatched") sawNewMatch = true;
+          eventNames.push(result.eventName ?? null);
         }
         if (loanIds.size > 0) {
           const ids = Array.from(loanIds).map(BigInt);
@@ -73,7 +75,7 @@ export async function subscribeAll(opts: {
         // New loans need initial principal/collateral backfilled from the
         // match-tx receipt — the matcher event itself only emits hashes.
         // Idempotent: only touches rows where initialPrincipalRaw IS NULL.
-        if (sawNewMatch) {
+        if (containsNewMatch(eventNames)) {
           const ic = await backfillInitialConditions(
             clients,
             log.child({ phase: "live-init" }),
@@ -83,10 +85,7 @@ export async function subscribeAll(opts: {
           }
         }
         if (lastBlock > 0n) await setLastBlock(clients.db, lastBlock);
-      } catch (err) {
-        log.error({ err: (err as Error).message }, "matcher onLogs failed — next reconcile will catch up");
-      }
-    },
+      }),
   });
 
   const unwatchOracles: Array<() => void> = [];
@@ -117,8 +116,8 @@ export async function subscribeAll(opts: {
           { err: err.message, feed: name, source: "oracle-sub" },
           `oracle subscription error (${name})`,
         ),
-      onLogs: async (logs: Log[]) => {
-        try {
+      onLogs: (logs: Log[]) =>
+        safelyRun(`oracle-tick:${name}`, log, async () => {
           const lastBlock = logs.at(-1)?.blockNumber ?? 0n;
           log.info(
             { feed: name, underlying, count: logs.length, lastBlock: lastBlock.toString() },
@@ -148,13 +147,7 @@ export async function subscribeAll(opts: {
               "rehydrated active loans after oracle tick",
             );
           }
-        } catch (err) {
-          log.error(
-            { err: (err as Error).message, feed: name },
-            "oracle onLogs failed — next tick / reconcile will catch up",
-          );
-        }
-      },
+        }),
     });
     unwatchOracles.push(unwatch);
   }
