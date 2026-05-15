@@ -1,21 +1,11 @@
 # PLAN — Indexer
 
-> **Retrospective.** This file was authored after the indexer shipped.
-> It applies the `/plango`-style "phases broken into tasks with TDD
-> where there's a clean test surface" framework to work that was
-> originally built without it. The PRD ([floe-dashboard-PRD.md](./floe-dashboard-PRD.md))
-> drove the original phasing; this file decomposes those phases into
-> tasks and notes the test coverage added in this branch.
->
-> The point is to show what the dashboard would look like under the
-> framework going forward — not to claim it was developed that way.
-
 ## Phase 2 — Scaffolding
 
 - [x] Extend pnpm workspace to include `apps/*`
 - [x] Add `@floe-dashboard/data` package — Drizzle schema (loans, markets, events, oracles, indexer_state) + Neon HTTP client
 - [x] Add `apps/indexer/` skeleton — Neon ping + state seed
-- [x] Wire vitest harness (added retroactively in this branch)
+- [x] Wire vitest harness
 
 ## Phase 3 — Indexer core
 
@@ -32,10 +22,10 @@
 - [x] Live subscriptions: matcher events + per-oracle ticks → hydrate affected loans
 - [x] 10-minute reconciliation pass as crash-recovery safety net
 
-**Test coverage added retroactively:** `resolveUnderlyingAggregator` —
-mocks viem's `readContract` and asserts the proxy walk returns the
-current underlying. Pinning this catches a class of silent-oracle bugs
-(subscriber attached to proxy → no events ever).
+**Test coverage:** `resolveUnderlyingAggregator` — mocks viem's
+`readContract` and asserts the proxy walk returns the current
+underlying. Pins a class of silent-oracle bugs (subscriber attached
+to proxy → no events ever).
 
 ## Phase 8 — Tier 1 additions (indexer side)
 
@@ -48,25 +38,24 @@ but absent from Floe's `/v1/markets` REST API.
 ## Post-Phase-8 — Production hardening
 
 Bugs surfaced after the dashboard went live with real loan activity.
-Each was fixed in main with a single commit; the tests added in this
-branch pin the invariant going forward.
+Each fix lands with a paired unit test pinning the invariant.
 
 - [x] **Bug**: Indexer crashes on transient Neon `fetch failed` inside viem `onLogs` callbacks
   - Fix: `d34d7cc fix(indexer): don't crash on transient Neon fetch failures`
-  - **Test (added here):** `safelyRun` — verifies error swallowing + label-tagged logging
+  - **Test:** `safelyRun` — verifies error swallowing + label-tagged logging
 
 - [x] **Bug**: New loans show `—` for BORROWED / COLLATERAL POSTED for up to 10 min after match
   - Fix: `0e2016b fix(indexer): backfill initial conditions in the live matcher handler`
-  - **Test (added here):** `containsNewMatch` — truth table for the LogIntentsMatched dispatch
+  - **Test:** `containsNewMatch` — truth table for the LogIntentsMatched dispatch
 
 - [x] **Bug**: `initial_principal_raw` captures net-disbursed (4.95) instead of matched principal (5.00)
   - Fix: `b6e9610 fix(indexer): initial principal = matched principal, not net-disbursed`
   - Re-ran one-shot backfill against production: 80 loans corrected
-  - **Test (added here):** `extractAmounts` — fixture-based, asserts matched-principal invariant against a synthetic match-tx receipt
+  - **Test:** `extractAmounts` — fixture-based, asserts matched-principal invariant against a synthetic match-tx receipt
 
 - [x] **Bug**: USDC/USDC loans never re-hydrate (`accrued_interest_raw` frozen at 0)
   - Fix: `38ad894 fix(indexer): blanket-refresh active loans in reconcile loop`
-  - **Test (added here):** `allActiveLoanIds` — Drizzle chain shape + bigint return
+  - **Test:** `allActiveLoanIds` — Drizzle chain shape + bigint return
 
 ## Test surface — total
 
@@ -77,6 +66,6 @@ helper surface. Run with:
 pnpm --filter @floe-dashboard/indexer test
 ```
 
-A green run pins the bug classes above against regression. The next
-edit that, say, reverts `extractAmounts` back to `to === borrower`
-will trip the assertion.
+A green run pins the bug classes above against regression. An edit
+that, say, reverts `extractAmounts` back to `to === borrower` will
+trip the assertion immediately.
